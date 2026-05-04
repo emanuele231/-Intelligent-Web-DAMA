@@ -1,16 +1,16 @@
 #ifndef MOVES_H
 #define MOVES_H
 
-/*MOVIMENTI
+#include "Piece.h"
 
-1- Movimento pedine: in diagonale dx/sx
-2- Cattura: salto della pedina avversaria 
-    if (in diagonale sx/dx ce una pedina bianca)
-          salta pedina 
-          cancella pedina bianca
-          punti +1
-3- Movimento dama: if (pedina arriva al bordo opposto della tavola)
-                         diventa dama
-                         sblocca Movimento dxa sxa dxd sxd
-4- presa multipla: continua a mangiare se rileva pedine nel suo quadrante (diag)
+
+bool move(int board[8][8], int fromrow, int fromcol, int torow, int tocol);
+bool eat(int board[8][8], int fromrow, int fromcol, int torow, int tocol);
+bool dama(int board[8][8], int fromrow, int fromcol, int torow, int tocol);
+/*
+void catch(Piece p, int row, int col);
+void king_move(Piece p, int row, int col);
+void multiple_catch(Piece p, int row, int col);
 */
+
+#endif

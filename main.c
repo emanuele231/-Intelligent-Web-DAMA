@@ -1,98 +1,116 @@
 #include "raylib.h"
-#include "Piece.h"
+#include "moves.h"
+#include <stdio.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <stdio.h>
 
-#define SCREEN_WIDTH  640
+#define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 640
-#define BOARD_SIZE    8
-#define CELL_SIZE     (SCREEN_WIDTH / BOARD_SIZE)
+#define BOARD_SIZE 8
+#define CELL_SIZE (SCREEN_WIDTH / BOARD_SIZE)
+#define PIECE_RADIUS (CELL_SIZE * 0.35f)
 
-// Array di pedine (massimo 24 pedine per giocatore)
-#define MAX_PIECES 24
-Piece black_pieces[MAX_PIECES];
-Piece white_pieces[MAX_PIECES];
-int black_count = 0;
-int white_count = 0;
+// Stato scacchiera: 0=vuota, 1=pedina bianca, 2=nera, 3=dama bianca, 4=dama nera
+int board[8][8] = {0};
 
-// Pedina selezionata
-Piece* selected_piece = NULL;
+// Stato drag & drop
+bool isDragging = false;
+int dragFromRow = -1, dragFromCol = -1;
+int hoverRow = -1, hoverCol = -1;
 
-void init_pieces(void) {
-    // Inizializza pedine nere (in alto, righe 0-2)
-    for (int r = 0; r < 3; r++) {
-        for (int c = 0; c < BOARD_SIZE; c++) {
-            if ((r + c) % 2 != 0) {
-                piece_init(&black_pieces[black_count], PIECE_BLACK, r, c);
-                black_count++;
-            }
-        }
-    }
-    
-    // Inizializza pedine bianche (in basso, righe 5-7)
-    for (int r = 5; r < 8; r++) {
-        for (int c = 0; c < BOARD_SIZE; c++) {
-            if ((r + c) % 2 != 0) {
-                piece_init(&white_pieces[white_count], PIECE_WHITE, r, c);
-                white_count++;
+// Inizializza pedine bianche (righe 5,6,7) sulle caselle scure
+void init_board(void) {
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            if ((r + c) % 2 != 0) { // Solo caselle scure
+                if (r >= 5) board[r][c] = 1;
             }
         }
     }
 }
 
-void draw_board(void) {
-    // Disegna scacchiera
-    for (int r = 0; r < BOARD_SIZE; r++) {
-        for (int c = 0; c < BOARD_SIZE; c++) {
-            Color cell = ((r + c) % 2 == 0) 
-                ? (Color){240, 217, 181, 255} 
-                : (Color){181, 136, 99, 255};
-            DrawRectangle(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE, cell);
-        }
-    }
-    
-    // Disegna tutte le pedine nere
-    for (int i = 0; i < black_count; i++) {
-        if (black_pieces[i].active) {
-            piece_draw(&black_pieces[i], CELL_SIZE);
-        }
-    }
-    
-    // Disegna tutte le pedine bianche
-    for (int i = 0; i < white_count; i++) {
-        if (white_pieces[i].active) {
-            piece_draw(&white_pieces[i], CELL_SIZE);
-        }
-    }
+// Converte coordinate schermo -> coordinate scacchiera
+void screen_to_grid(int mouseX, int mouseY, int *row, int *col) {
+    *col = mouseX / CELL_SIZE;
+    *row = mouseY / CELL_SIZE;
+    if (*col < 0) *col = 0; if (*col >= 8) *col = 7;
+    if (*row < 0) *row = 0; if (*row >= 8) *row = 7;
 }
+
 
 int main(void) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dama - Intelligent Web");
     SetTargetFPS(60);
-    
-    init_pieces();
-    
-    printf("Pedine nere: %d\n", black_count);
-    printf("Pedine bianche: %d\n", white_count);
+    init_board();
 
     while (!WindowShouldClose()) {
-        // Gestione mouse (preparazione per il prossimo step)
+        Vector2 mouse = GetMousePosition();
+        screen_to_grid((int)mouse.x, (int)mouse.y, &hoverRow, &hoverCol);
+
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            Vector2 mouse_pos = GetMousePosition();
-            int clicked_col = mouse_pos.x / CELL_SIZE;
-            int clicked_row = mouse_pos.y / CELL_SIZE;
-            
-            printf("Click su: riga=%d, col=%d\n", clicked_row, clicked_col);
-            
-            // Qui aggiungeremo la logica di selezione
+            if (board[hoverRow][hoverCol] == 1) { // Solo pedine bianche
+                isDragging = true;
+                dragFromRow = hoverRow;
+                dragFromCol = hoverCol;
+            }
         }
-        
+
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
+            if (eat(board, dragFromRow, dragFromCol, hoverRow, hoverCol)){
+                printf("catturato: +1");
+            } else if (!move(board, dragFromRow, dragFromCol, hoverRow, hoverCol)) {
+                printf("Mossa non valida! La pedina torna indietro.\n");
+            } else if (dama(board, dragFromRow, dragFromCol, hoverRow, hoverCol)){
+                printf("DAMA!");
+            }
+            isDragging = false;
+            dragFromRow = -1; dragFromCol = -1;
+        }
+
+        if(dragFromRow == 7){
+            printf("DAMA!");
+        }
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        draw_board();
-        
-        // Istruzioni
-        DrawText("Dama - Clicca su una pedina per selezionarla", 10, SCREEN_HEIGHT - 30, 20, DARKGRAY);
-        
+
+        // 1. Disegna scacchiera
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Color cell = ((r + c) % 2 == 0) ? (Color){240, 217, 181, 255} 
+                                                : (Color){181, 136, 99, 255};
+                DrawRectangle(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE, cell);
+
+                // Evidenzia casella sotto il mouse durante il drag
+                if (isDragging && r == hoverRow && c == hoverCol) {
+                    DrawRectangle(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE, 
+                                  (Color){0, 255, 0, 80});
+                }
+            }
+        }
+
+        // 2. Disegna pedine ferme
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                if (board[r][c] == 1) {
+                    // Nascondi la pedina originale mentre la trasciniamo
+                    if (isDragging && r == dragFromRow && c == dragFromCol) continue;
+
+                    Vector2 center = {(float)(c * CELL_SIZE + CELL_SIZE/2), 
+                                      (float)(r * CELL_SIZE + CELL_SIZE/2)};
+                    DrawCircleV(center, PIECE_RADIUS, WHITE);
+                    DrawCircleLinesV(center, PIECE_RADIUS, BLACK);
+                }
+            }
+        }
+
+        // 3. Disegna "fantasma" della pedina trascinata
+        if (isDragging) {
+            DrawCircleV(mouse, PIECE_RADIUS, (Color){255, 255, 255, 180});
+            DrawCircleLinesV(mouse, PIECE_RADIUS, RED);
+        }
+
         EndDrawing();
     }
 
