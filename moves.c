@@ -74,3 +74,13 @@ if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
     board[torow][tocol] = piece;  // Piazza la Dama a destinazione
     return true;
 }
+
+bool check_promotion(int board[8][8], int row, int col) {
+    printf("cella (%d, %d)\n", row, col);
+    if (board[row][col] == 1 && row == 0) {
+        board[row][col] = 3; // 3 = Dama Bianca
+        printf("Promozione a Dama! (%d, %d)\n", row, col);
+        return true;
+    }
+    return false;
+}

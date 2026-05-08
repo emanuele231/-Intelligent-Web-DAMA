@@ -10,6 +10,7 @@
 #define BOARD_SIZE 8
 #define CELL_SIZE (SCREEN_WIDTH / BOARD_SIZE)
 #define PIECE_RADIUS (CELL_SIZE * 0.35f)
+#define PIECE_RADIUS_QUEEN (CELL_SIZE * 0.20f)
 
 // Stato scacchiera: 0=vuota, 1=pedina bianca, 2=nera, 3=dama bianca, 4=dama nera
 int board[8][8] = {0};
@@ -18,6 +19,7 @@ int board[8][8] = {0};
 bool isDragging = false;
 int dragFromRow = -1, dragFromCol = -1;
 int hoverRow = -1, hoverCol = -1;
+int destrow = -1, destcol = -1;
 
 // Inizializza pedine bianche (righe 5,6,7) sulle caselle scure
 void init_board(void) {
@@ -25,6 +27,7 @@ void init_board(void) {
         for (int c = 0; c < 8; c++) {
             if ((r + c) % 2 != 0) { // Solo caselle scure
                 if (r >= 5) board[r][c] = 1;
+                if (r <= 2) board[r][c] = 2;
             }
         }
     }
@@ -49,28 +52,49 @@ int main(void) {
         screen_to_grid((int)mouse.x, (int)mouse.y, &hoverRow, &hoverCol);
 
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            if (board[hoverRow][hoverCol] == 1) { // Solo pedine bianche
+            int piece = board[hoverRow][hoverCol];
+            if (piece == 1 | piece == 3) { // Solo pedine bianche
                 isDragging = true;
                 dragFromRow = hoverRow;
                 dragFromCol = hoverCol;
+                destrow = hoverRow;
+                destcol = hoverCol;
             }
         }
 
-        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
-            if (eat(board, dragFromRow, dragFromCol, hoverRow, hoverCol)){
-                printf("catturato: +1");
-            } else if (!move(board, dragFromRow, dragFromCol, hoverRow, hoverCol)) {
-                printf("Mossa non valida! La pedina torna indietro.\n");
-            } else if (dama(board, dragFromRow, dragFromCol, hoverRow, hoverCol)){
-                printf("DAMA!");
-            }
-            isDragging = false;
-            dragFromRow = -1; dragFromCol = -1;
-        }
+if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
+    bool successo = false;  // Dichiarata e inizializzata QUI
+    int destRow = hoverRow; // Usa le variabili corrette
+    int destCol = hoverCol;
 
-        if(dragFromRow == 7){
-            printf("DAMA!");
-        }
+
+    if (eat(board, dragFromRow, dragFromCol, destRow, destCol)) {
+        printf("Cattura riuscita!\n");
+        successo = true;  
+    }
+    else if (dama(board, dragFromRow, dragFromCol, destRow, destCol)) {
+        printf("Mossa Dama!\n");
+        successo = true;
+    }
+    else if (move(board, dragFromRow, dragFromCol, destRow, destCol)) {
+        printf("Mossa Pedina!\n");
+        successo = true;
+    }
+    else {
+        // Solo se TUTTE le precedenti hanno fallito
+        printf("Mossa non valida! La pedina torna indietro.\n");
+    }
+
+    // Verifica promozione DOPO qualsiasi mossa riuscita
+    if (successo) {
+        check_promotion(board, destRow, destCol);
+    }
+
+    // Reset stato drag
+    isDragging = false;
+    dragFromRow = -1;
+    dragFromCol = -1;
+}
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
@@ -93,15 +117,36 @@ int main(void) {
         // 2. Disegna pedine ferme
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
-                if (board[r][c] == 1) {
-                    // Nascondi la pedina originale mentre la trasciniamo
+                int piece = board[r][c];
+                if (piece == 0) continue; 
                     if (isDragging && r == dragFromRow && c == dragFromCol) continue;
 
-                    Vector2 center = {(float)(c * CELL_SIZE + CELL_SIZE/2), 
-                                      (float)(r * CELL_SIZE + CELL_SIZE/2)};
-                    DrawCircleV(center, PIECE_RADIUS, WHITE);
-                    DrawCircleLinesV(center, PIECE_RADIUS, BLACK);
+                    Vector2 center = {
+                        (float)(c * CELL_SIZE + CELL_SIZE/2), 
+                        (float)(r * CELL_SIZE + CELL_SIZE/2)
+                                    };
+                Color fillColor, borderColor;
+                if (piece == 1) {           // Pedina Bianca
+                    fillColor = WHITE;
+                    borderColor = DARKGRAY;
                 }
+                else if (piece == 3) {      // Dama Bianca (GIALLO!)
+                    fillColor = GOLD;
+                    borderColor = ORANGE;
+                }
+                else if (piece == 2) {      // Pedina Nera (IA)
+                    fillColor = BLACK;
+                    borderColor = GRAY;
+                }
+                else if (piece == 4) {      // Dama Nera
+                    fillColor = DARKPURPLE;
+                    borderColor = VIOLET;
+                }
+                else continue;
+
+                DrawCircleV(center, PIECE_RADIUS, fillColor);
+                DrawCircleLinesV(center, PIECE_RADIUS, fillColor);
+
             }
         }
 
