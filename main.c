@@ -12,6 +12,9 @@
 #define PIECE_RADIUS (CELL_SIZE * 0.35f)
 #define PIECE_RADIUS_QUEEN (CELL_SIZE * 0.20f)
 
+bool isPlayerTurn = true;
+bool isIAthinking = false;
+
 // Stato scacchiera: 0=vuota, 1=pedina bianca, 2=nera, 3=dama bianca, 4=dama nera
 int board[8][8] = {0};
 
@@ -41,7 +44,6 @@ void screen_to_grid(int mouseX, int mouseY, int *row, int *col) {
     if (*row < 0) *row = 0; if (*row >= 8) *row = 7;
 }
 
-
 int main(void) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dama - Intelligent Web");
     SetTargetFPS(60);
@@ -51,7 +53,7 @@ int main(void) {
         Vector2 mouse = GetMousePosition();
         screen_to_grid((int)mouse.x, (int)mouse.y, &hoverRow, &hoverCol);
 
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && isPlayerTurn) {
             int piece = board[hoverRow][hoverCol];
             if (piece == 1 | piece == 3) { // Solo pedine bianche
                 isDragging = true;
@@ -88,6 +90,8 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
     // Verifica promozione DOPO qualsiasi mossa riuscita
     if (successo) {
         check_promotion(board, destRow, destCol);
+        isPlayerTurn = false;
+        isIAthinking = true;
     }
 
     // Reset stato drag
@@ -155,6 +159,29 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
             DrawCircleV(mouse, PIECE_RADIUS, (Color){255, 255, 255, 180});
             DrawCircleLinesV(mouse, PIECE_RADIUS, RED);
         }
+
+        if(isPlayerTurn) {
+            DrawRectangle(0, 0, 150, 30, (Color){255, 255, 255, 200});
+            DrawText("TOCCA A TE!", 10, 5, 20, BLACK);
+        } else {
+            DrawRectangle(0, 0, 150, 30, (Color){0, 0, 0, 200});
+        }
+
+        if (!isPlayerTurn && isIAthinking) {
+    
+        // Per oggi: simuliamo un "pensiero" di 1 secondo e poi passiamo il turno
+            static float waitTimer = 0.0f;
+            waitTimer += GetFrameTime(); // Tempo trascorso dall'ultimo frame
+    
+               if (waitTimer >= 1.0f) {
+                    printf("[IA STUB] Mossa casuale simulata (domani logica vera!)\n");
+        
+                    isPlayerTurn = true;
+                    isIAthinking = false;
+                    waitTimer = 0.0f;
+                    printf("Tocca di nuovo a te!\n");
+    }
+}
 
         EndDrawing();
     }
