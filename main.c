@@ -1,5 +1,8 @@
 #include "raylib.h"
 #include "moves.h"
+#include <time.h>
+#include "bitboard.h"
+#include "UCB1vers1.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -11,6 +14,7 @@
 #define CELL_SIZE (SCREEN_WIDTH / BOARD_SIZE)
 #define PIECE_RADIUS (CELL_SIZE * 0.35f)
 #define PIECE_RADIUS_QUEEN (CELL_SIZE * 0.20f)
+MemoryPool ai_pool;
 
 bool isPlayerTurn = true;
 bool isIAthinking = false;
@@ -167,21 +171,28 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
             DrawRectangle(0, 0, 150, 30, (Color){0, 0, 0, 200});
         }
 
-        if (!isPlayerTurn && isIAthinking) {
-    
-        // Per oggi: simuliamo un "pensiero" di 1 secondo e poi passiamo il turno
-            static float waitTimer = 0.0f;
-            waitTimer += GetFrameTime(); // Tempo trascorso dall'ultimo frame
-    
-               if (waitTimer >= 1.0f) {
-                    printf("[IA STUB] Mossa casuale simulata (domani logica vera!)\n");
-        
-                    isPlayerTurn = true;
-                    isIAthinking = false;
-                    waitTimer = 0.0f;
-                    printf("Tocca di nuovo a te!\n");
-    }
-}
+        if(!isPlayerTurn && isIAthinking){
+            static clock_t ai_start = 0;
+            if (ai_start == 0) {
+                ai_start = clock();
+                printf("IA sta pensando (UCB1 - 0.2s)...\n");
+            }
+            float elapsed = (clock() - ai_start) / (float)CLOCKS_PER_SEC;
+
+            if (elapsed >= 0.2f) {  //anytime: 0.2s
+             //  Inizializza ROOT con lo stato corrente
+                mcts_search((Bitboard*)&board, 0.2f, &ai_pool);
+                // ️ Per ora l'IA non sceglie ancora la mossa (loop UCB1 da implementare)
+                // Domani aggiungeremo: Move best = get_best_move(root);
+                isPlayerTurn = true;
+                isIAthinking = false;
+                ai_start = 0;
+                printf("IA pronta per il loop UCB1!\n");
+
+            }
+        }
+
+
 
         EndDrawing();
     }

@@ -34,7 +34,9 @@ typedef struct {
 } MemoryPool; 
 
 void init_pool(MemoryPool *pool);
-void mtcs_search(Bitboard *root_state, float time_limit, MemoryPool *pool);
+static MTCSNode* alloc_node(MemoryPool *pool);
+void mcts_search(Bitboard *root_state, float time_limit, MemoryPool *pool);
+MTCSNode generate_legal_moves(Bitboard *board, MTCSNode *children[], MemoryPool *pool);
 Move get_best_move(MTCSNode *root);
 double ucb1_score(MTCSNode *node, double parent_visits);
 MTCSNode* select_best_child(MTCSNode *parent);
