@@ -171,24 +171,26 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
             DrawRectangle(0, 0, 150, 30, (Color){0, 0, 0, 200});
         }
 
-        if(!isPlayerTurn && isIAthinking){
+        if (!isPlayerTurn && isIAthinking) {
             static clock_t ai_start = 0;
             if (ai_start == 0) {
                 ai_start = clock();
-                printf("IA sta pensando (UCB1 - 0.2s)...\n");
+                printf(" IA sta pensando (0.2s)...\n");
             }
-            float elapsed = (clock() - ai_start) / (float)CLOCKS_PER_SEC;
 
-            if (elapsed >= 0.2f) {  //anytime: 0.2s
-             //  Inizializza ROOT con lo stato corrente
-                mcts_search((Bitboard*)&board, 0.2f, &ai_pool);
-                // ️ Per ora l'IA non sceglie ancora la mossa (loop UCB1 da implementare)
-                // Domani aggiungeremo: Move best = get_best_move(root);
+            if (((clock() - ai_start) / (float)CLOCKS_PER_SEC) >= 0.2f) {
+                Bitboard dummy_board = {0}; // Placeholder board
+                mcts_search(&dummy_board, 0.2f, &ai_pool);
+                
+                // Recupera la mossa migliore basata sulle visite
+                Move ai_move = get_best_move(&ai_pool.nodes[0]); // Il root è il primo nodo allocato
+                
+                // QUI applicheremo la mossa vera alla board domani
+                // apply_move_to_board(board, ai_move);
+                
                 isPlayerTurn = true;
                 isIAthinking = false;
                 ai_start = 0;
-                printf("IA pronta per il loop UCB1!\n");
-
             }
         }
 
