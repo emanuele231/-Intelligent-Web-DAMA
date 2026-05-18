@@ -8,9 +8,7 @@ typedef struct  Bitboard{
     uint8_t turn;
 } Bitboard;
 
-/*struct MCTSNode;
-struct MemoryPool;
-
-uint8_t generate_legal_moves(Bitboard *board, struct MTCSNode *children[], struct MemoryPool *pool);
-*/
+static inline int to_bit(int r, int c);
+void board_to_bitboard(int board[8][8], Bitboard *bb);
+void bitboard_to_board(Bitboard *bb, int board[8][8]);
 #endif

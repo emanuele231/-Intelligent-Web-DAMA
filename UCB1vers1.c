@@ -85,14 +85,14 @@ void mcts_search(Bitboard *current_board, float time_limit, MemoryPool *pool) {
     //1. SELECTION
     clock_t start = clock();
     int iterations = 0;
-    while (((clock() - start) / (float)CLOCKS_PER_SEC) < time_limit) {
-        //1. SELECTION
+    do {
         MCTSNode *current = root;
-        while (current->num_children > 0 && current->children[0] != NULL){
-            MCTSNode *best_child = select_best_child(current);
-            if(best_child) {
-                current = best_child;
-            } else break;
+        while (current->num_children > 0) {
+            MCTSNode * best_child = select_best_child(current);
+            if (best_child) current = best_child;
+            else break;
+        }
+    
         
         //2. EXPANSION
          if (current->num_children < MAX_CHILDREN) {
@@ -113,10 +113,15 @@ void mcts_search(Bitboard *current_board, float time_limit, MemoryPool *pool) {
             temp = temp->parent;
         }
         iterations++;
-    }
+
+        //controllo del tempo esplicito
+        float elapsed = (float)(clock() - start) / CLOCKS_PER_SEC;
+        if (elapsed >= time_limit) break;
+    } while(1);
+    
     printf("UCB1 Selection: %d iterazioni in %.3f sec\n", iterations, time_limit);
-  }
-}
+  } 
+
 
 Move get_best_move(MCTSNode *root) {
     Move null_move = {0, 0, 0};

@@ -84,3 +84,36 @@ bool check_promotion(int board[8][8], int row, int col) {
     }
     return false;
 }
+
+void apply_ai_move(int board[8][8], int fromRow, int fromCol, int toRow, int toCol) {
+    if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8) return;
+    if (fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) return;
+    if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8) {
+        printf("❌ Fuori dalla scacchiera\n"); return;
+    }
+
+
+    int piece = board[fromRow][fromCol];
+    if (piece != 2 && piece != 4) {
+        printf("non è una pedina nera");
+        return;
+    }
+
+    int dRow = toRow - fromRow;
+    int dCol = toCol - fromCol;
+
+    if (abs(dRow) == 2 && abs(dCol) == 2) {
+        int midRow = (fromRow + toRow) / 2;
+        int midCol = (fromCol + toCol) / 2;
+        board[midRow][midCol] = 0; // Rimuovi pedina mangiata
+        printf("avversario cattura in (%d, %d)\n", midRow, midCol);
+    }
+
+    board[fromRow][fromCol] = 0;
+    board[toRow][toCol] = piece;
+
+    if (piece == 2 && toRow == 0) {
+        board[toRow][toCol] = 4; // 4 = Dama Nera
+        printf("avversario promuove a Dama Nera! (%d, %d)\n", toRow, toCol);
+    }
+}

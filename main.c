@@ -107,7 +107,41 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        // 1. Disegna scacchiera
+        if (!isPlayerTurn && isIAthinking) {
+            static clock_t ai_start = 0;
+            static Bitboard ai_state;
+
+            if (ai_start == 0) {
+                ai_start = clock();
+                board_to_bitboard(board, &ai_state);
+                printf("l'avversario sta pensando");
+            }
+            if (((clock() - ai_start) / (float)CLOCKS_PER_SEC) >= 0.2f) {
+                mcts_search(&ai_state, 0.2f, &ai_pool);
+
+                // Recupera la mossa migliore basata sulle visite
+                Move best = get_best_move(&ai_pool.nodes[0]); // Il root è il primo nodo allocato
+
+                int fromR = best.from / 8;
+                int fromC = best.from % 8;
+                int toR   = best.to / 8;
+                int toC   = best.to % 8;
+
+                printf("🔄 l'avversario sposta: (%d,%d) -> (%d,%d)\n", fromR, fromC, toR, toC);
+
+                apply_ai_move(board, fromR, fromC, toR, toC);
+
+                //bitboard_to_board(&ai_state, board);
+
+                //tocca a noi
+                isPlayerTurn = true;
+                isIAthinking = false;
+                ai_start = 0;
+                printf("tocca a te!");
+            }
+        }
+
+                // 1. Disegna scacchiera
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Color cell = ((r + c) % 2 == 0) ? (Color){240, 217, 181, 255} 
@@ -170,31 +204,6 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
         } else {
             DrawRectangle(0, 0, 150, 30, (Color){0, 0, 0, 200});
         }
-
-        if (!isPlayerTurn && isIAthinking) {
-            static clock_t ai_start = 0;
-            if (ai_start == 0) {
-                ai_start = clock();
-                printf(" IA sta pensando (0.2s)...\n");
-            }
-
-            if (((clock() - ai_start) / (float)CLOCKS_PER_SEC) >= 0.2f) {
-                Bitboard dummy_board = {0}; // Placeholder board
-                mcts_search(&dummy_board, 0.2f, &ai_pool);
-                
-                // Recupera la mossa migliore basata sulle visite
-                Move ai_move = get_best_move(&ai_pool.nodes[0]); // Il root è il primo nodo allocato
-                
-                // QUI applicheremo la mossa vera alla board domani
-                // apply_move_to_board(board, ai_move);
-                
-                isPlayerTurn = true;
-                isIAthinking = false;
-                ai_start = 0;
-            }
-        }
-
-
 
         EndDrawing();
     }
