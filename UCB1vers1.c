@@ -53,7 +53,8 @@ double simulate_rollout(Bitboard *state){
 }
 
 void expand_node(MCTSNode *node, MemoryPool *pool){
-    if (node->num_children >= MAX_CHILDREN) return;
+    node->num_children = 0;
+   /* if (node->num_children >= MAX_CHILDREN) return;
 
     MCTSNode *child = alloc_node(pool);
     if (!child) return;
@@ -64,12 +65,68 @@ void expand_node(MCTSNode *node, MemoryPool *pool){
     child->move.from = rand() % 64;
     child->move.to = rand() % 64;
 
-    node->children[node->num_children++] = child;
+    node->children[node->num_children++] = child;*/
 }
 
-uint8_t generate_legal_moves(Bitboard *board, MCTSNode *children[], MemoryPool *pool) {
-    (void)board; (void)children; (void)pool;
-    return 0;
+uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPool *pool) {
+    uint64_t black_pieces = bb->black | bb->black_k;
+    uint64_t occupied = bb->black | bb->black_k | bb->white | bb->white_k;
+    uint8_t move_count = 0;
+
+    if (black_pieces == 0) {
+        printf(" CRITICO: Mask Nera è ZERO. L'IA non vede le sue pedine!\n");
+        return 0;
+    }
+    for(int bit = 0; bit < 64; bit++) {
+        if((black_pieces >> bit) && 1ULL) {
+            int fr = bit / 8;
+            int fc = bit % 8;
+
+            int dr = (fr < 4) ? 1 : -1;
+            int dc_offsets[2] = {-1, 1};
+
+            printf("Pedina nera trovata in Riga:%d Col:%d (bit %d)\n", fr, fc, bit);
+
+            for (int i = 0; i < 2; i++) {
+               int nr = fr + dr;
+               int nc = fc + dc_offsets[i];
+
+               //confini
+                if (nr <= 0 || nr > 8 || nc < 0 || nc >= 8){
+                    printf("FUORI SCACCHIERA"); continue;
+                    //solo celle scure
+                    if((nr + nc) % 2 != 0){
+                        printf("non è una casella valida"); continue;
+                        //destinazione libera
+                        int nbit = nr * 8 + nc;
+                        if(((occupied >> bit) & 1ULL)) {
+                            printf("OCCUPATA"); continue;
+
+            //se ce spazio tra i figli, creiamo un nodo per la pedina presa
+            if(move_count < MAX_CHILDREN && pool->top < MAX_NODES){
+                MCTSNode *child = &pool->nodes[pool->top++];
+                memset(child, 0, sizeof(MCTSNode));
+                child->state = bb;
+                child->move.from = (uint8_t)bit;
+                child->move.to = (uint8_t)nbit;
+                child->move.capture = 0;
+                children[move_count++] = child;
+                            
+                }
+            }
+        }
+    }
+}
+        }
+    }
+
+    if (move_count == 0) {
+        printf(" Nessuna pedina nera trovata! L'IA non può muovere.\n");
+    } else {
+        printf(" L'IA ha identificato %d pedine nere pronte per il calcolo mosse.\n", move_count);
+    }
+
+    return move_count;
 }
 
 void mcts_search(Bitboard *current_board, float time_limit, MemoryPool *pool) {
@@ -79,8 +136,12 @@ void mcts_search(Bitboard *current_board, float time_limit, MemoryPool *pool) {
     if(!root) return;
 
     root->state = current_board;
-    root->num_children = 0;
+    root->num_children = generate_legal_moves(current_board, root->children, pool);
     printf("start MTCS search...\n");
+
+    if(root->num_children == 0){
+        printf("nessuna mossa legale, partita terminata, PATTA!");
+    }
 
     //1. SELECTION
     clock_t start = clock();
@@ -88,9 +149,8 @@ void mcts_search(Bitboard *current_board, float time_limit, MemoryPool *pool) {
     do {
         MCTSNode *current = root;
         while (current->num_children > 0) {
-            MCTSNode * best_child = select_best_child(current);
-            if (best_child) current = best_child;
-            else break;
+            current = select_best_child(current);
+            if (!current) break;
         }
     
         

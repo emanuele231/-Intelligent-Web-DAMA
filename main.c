@@ -127,7 +127,7 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
                 int toR   = best.to / 8;
                 int toC   = best.to % 8;
 
-                printf("🔄 l'avversario sposta: (%d,%d) -> (%d,%d)\n", fromR, fromC, toR, toC);
+                printf("l'avversario sposta: (%d,%d) -> (%d,%d)\n", fromR, fromC, toR, toC);
 
                 apply_ai_move(board, fromR, fromC, toR, toC);
 
