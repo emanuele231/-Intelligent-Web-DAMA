@@ -73,6 +73,7 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
     int destRow = hoverRow; // Usa le variabili corrette
     int destCol = hoverCol;
 
+    if (dragFromRow != destRow || dragFromCol != destCol) {
 
     if (eat(board, dragFromRow, dragFromCol, destRow, destCol)) {
         printf("Cattura riuscita!\n");
@@ -97,6 +98,7 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
         isPlayerTurn = false;
         isIAthinking = true;
     }
+}
 
     // Reset stato drag
     isDragging = false;
@@ -120,7 +122,7 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
                 mcts_search(&ai_state, 0.2f, &ai_pool);
 
                 // Recupera la mossa migliore basata sulle visite
-                Move best = get_best_move(&ai_pool.nodes[0]); // Il root è il primo nodo allocato
+                Move best = get_best_move(&ai_pool.nodes[0], &ai_state); // Il root è il primo nodo allocato
 
                 int fromR = best.from / 8;
                 int fromC = best.from % 8;

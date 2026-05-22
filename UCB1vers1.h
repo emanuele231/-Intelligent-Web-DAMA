@@ -37,7 +37,7 @@ void init_pool(MemoryPool *pool);
 void mcts_search(Bitboard *root_state, float time_limit, MemoryPool *pool);
 double ucb1_score(MCTSNode *node, double parent_visits);
 MCTSNode* select_best_child(MCTSNode *parent);
-Move get_best_move(MCTSNode *root);
+Move get_best_move(MCTSNode *root, Bitboard *bb);
 
 
 #endif

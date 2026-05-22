@@ -38,18 +38,27 @@ bool move(int board[8][8], int fromrow, int fromcol, int torow, int tocol){
 }
 
 bool eat (int board[8][8], int fromrow, int torow, int fromcol, int tocol){
+    if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
+    if (board[torow][tocol] != 0) return false;
+    
+    int piece = board[fromrow][fromcol];
+    if(piece != 1 && piece != 3) return false;
+
     int drow = torow - fromrow; 
     int dcol = tocol - fromcol;
+    if (abs(drow) != 2 || abs(dcol) != 2) return false;
+
+    if (piece == 1 && drow != 2) return false;
+
 
     int midRow = fromrow + drow / 2;
     int midCol = fromcol + dcol / 2;
-
-    if(board[midRow][midCol] != 2) return false;
+    if (board[midRow][midCol] != 2 && board[midRow][midCol] != 4) return false;
 
     //cattura
     board[fromrow][fromcol] = 0;
     board[midRow][midCol] = 0;
-    board[torow][tocol] = 0;
+    board[torow][tocol] = piece;
 
     return true;
 }
@@ -86,10 +95,9 @@ bool check_promotion(int board[8][8], int row, int col) {
 }
 
 void apply_ai_move(int board[8][8], int fromRow, int fromCol, int toRow, int toCol) {
-    if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8) return;
-    if (fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) return;
-    if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8) {
-        printf("❌ Fuori dalla scacchiera\n"); return;
+    if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8 ||
+        fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8){
+        printf("Fuori dalla scacchiera\n"); return;
     }
 
 
