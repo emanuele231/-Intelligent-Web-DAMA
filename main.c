@@ -6,14 +6,13 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <stdio.h>
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 640
 #define BOARD_SIZE 8
 #define CELL_SIZE (SCREEN_WIDTH / BOARD_SIZE)
 #define PIECE_RADIUS (CELL_SIZE * 0.35f)
-#define PIECE_RADIUS_QUEEN (CELL_SIZE * 0.20f)
+
 MemoryPool ai_pool;
 
 bool isPlayerTurn = true;
@@ -26,15 +25,14 @@ int board[8][8] = {0};
 bool isDragging = false;
 int dragFromRow = -1, dragFromCol = -1;
 int hoverRow = -1, hoverCol = -1;
-int destrow = -1, destcol = -1;
 
-// Inizializza pedine bianche (righe 5,6,7) sulle caselle scure
+// Inizializza pedine: Bianco in basso (righe 5-7), Nero in alto (righe 0-2)
 void init_board(void) {
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
             if ((r + c) % 2 != 0) { // Solo caselle scure
-                if (r >= 5) board[r][c] = 1;
-                if (r <= 2) board[r][c] = 2;
+                if (r >= 5) board[r][c] = 1;  // Bianco (TU) in basso
+                if (r <= 2) board[r][c] = 2;  // Nero (IA) in alto
             }
         }
     }
@@ -57,58 +55,78 @@ int main(void) {
         Vector2 mouse = GetMousePosition();
         screen_to_grid((int)mouse.x, (int)mouse.y, &hoverRow, &hoverCol);
 
+        // INPUT: Pressione mouse (inizio drag)
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && isPlayerTurn) {
             int piece = board[hoverRow][hoverCol];
-            if (piece == 1 | piece == 3) { // Solo pedine bianche
+            if (piece == 1 || piece == 3) { 
                 isDragging = true;
                 dragFromRow = hoverRow;
                 dragFromCol = hoverCol;
-                destrow = hoverRow;
-                destcol = hoverCol;
             }
         }
 
-if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
-    bool successo = false;  // Dichiarata e inizializzata QUI
-    int destRow = hoverRow; // Usa le variabili corrette
-    int destCol = hoverCol;
+        // INPUT: Rilascio mouse (esecuzione mossa)
+    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
+    bool successo = false;
+    int finalRow = -1, finalCol = -1;
 
-    if (dragFromRow != destRow || dragFromCol != destCol) {
+    //AUTO-CATTURA: Scansiona le diagonali verso il basso
+    // Bianco si muove verso righe maggiori (+1). Controlla le 2 diagonali.
+    int dr = -1; 
+    int dc_opts[2] = {-1, 1};
 
-    if (eat(board, dragFromRow, dragFromCol, destRow, destCol)) {
-        printf("Cattura riuscita!\n");
-        successo = true;  
-    }
-    else if (dama(board, dragFromRow, dragFromCol, destRow, destCol)) {
-        printf("Mossa Dama!\n");
-        successo = true;
-    }
-    else if (move(board, dragFromRow, dragFromCol, destRow, destCol)) {
-        printf("Mossa Pedina!\n");
-        successo = true;
-    }
-    else {
-        // Solo se TUTTE le precedenti hanno fallito
-        printf("Mossa non valida! La pedina torna indietro.\n");
+    for(int i = 0; i < 2; i++) {
+        int midR = dragFromRow + dr;
+        int midC = dragFromCol + dc_opts[i];
+        int landR = dragFromRow + 2 * dr;
+        int landC = dragFromCol + 2 * dc_opts[i];
+
+        // Verifica che la terra di atterraggio sia dentro la scacchiera
+        if(landR < 8 && landC >= 0 && landC < 8) {
+            //Se c'è una nera nel mezzo E la casella di arrivo è vuota
+            if((board[midR][midC] == 2 || board[midR][midC] == 4) && board[landR][landC] == 0) {
+                // Esegui cattura automatica
+                board[dragFromRow][dragFromCol] = 0;      // Libera partenza
+                board[midR][midC] = 0;                    // ️ Mangia la nera
+                board[landR][landC] = 1;                  // Posiziona bianca
+                finalRow = landR;
+                finalCol = landC;
+                successo = true;
+                printf("Cattura automatica: nera in (%d,%d) rimossa!\n", midR, midC);
+                break; // Cattura trovata ed eseguita
+            }
+        }
     }
 
-    // Verifica promozione DOPO qualsiasi mossa riuscita
-    if (successo) {
-        check_promotion(board, destRow, destCol);
+    // Se non era una cattura, procedi con mosse normali (coordinate mouse)
+    if(!successo) {
+        int destRow = hoverRow;
+        int destCol = hoverCol;
+        if(dragFromRow != destRow || dragFromCol != destCol) {
+            if(dama(board, dragFromRow, dragFromCol, destRow, destCol)) {
+                printf("Mossa Dama!\n"); successo = true; finalRow = destRow; finalCol = destCol;
+            } else if(move(board, dragFromRow, dragFromCol, destRow, destCol)) {
+                printf("Mossa Pedina!\n"); successo = true; finalRow = destRow; finalCol = destCol;
+            } else {
+                printf("Mossa non valida.\n");
+            }
+        }
+    }
+
+    //  Gestione post-mossa
+    if(successo) {
+        check_promotion(board, finalRow, finalCol);
         isPlayerTurn = false;
         isIAthinking = true;
     }
-}
 
-    // Reset stato drag
+    // Reset drag
     isDragging = false;
-    dragFromRow = -1;
+    dragFromRow = -1; 
     dragFromCol = -1;
 }
 
-        BeginDrawing();
-        ClearBackground(RAYWHITE);
-
+        // LOGICA IA (UCB1 MCTS - 0.2s)
         if (!isPlayerTurn && isIAthinking) {
             static clock_t ai_start = 0;
             static Bitboard ai_state;
@@ -116,13 +134,12 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
             if (ai_start == 0) {
                 ai_start = clock();
                 board_to_bitboard(board, &ai_state);
-                printf("l'avversario sta pensando");
+                printf("l'avversario sta pensando...\n");
             }
+
             if (((clock() - ai_start) / (float)CLOCKS_PER_SEC) >= 0.2f) {
                 mcts_search(&ai_state, 0.2f, &ai_pool);
-
-                // Recupera la mossa migliore basata sulle visite
-                Move best = get_best_move(&ai_pool.nodes[0], &ai_state); // Il root è il primo nodo allocato
+                Move best = get_best_move(&ai_pool.nodes[0], &ai_state);
 
                 int fromR = best.from / 8;
                 int fromC = best.from % 8;
@@ -130,27 +147,26 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
                 int toC   = best.to % 8;
 
                 printf("l'avversario sposta: (%d,%d) -> (%d,%d)\n", fromR, fromC, toR, toC);
-
                 apply_ai_move(board, fromR, fromC, toR, toC);
 
-                //bitboard_to_board(&ai_state, board);
-
-                //tocca a noi
                 isPlayerTurn = true;
                 isIAthinking = false;
                 ai_start = 0;
-                printf("tocca a te!");
+                printf("tocca a te!\n");
             }
         }
 
-                // 1. Disegna scacchiera
+        // RENDERING======================================================
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+
+        // Disegna scacchiera
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Color cell = ((r + c) % 2 == 0) ? (Color){240, 217, 181, 255} 
                                                 : (Color){181, 136, 99, 255};
                 DrawRectangle(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE, cell);
 
-                // Evidenzia casella sotto il mouse durante il drag
                 if (isDragging && r == hoverRow && c == hoverCol) {
                     DrawRectangle(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE, 
                                   (Color){0, 255, 0, 80});
@@ -158,27 +174,30 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
             }
         }
 
-        // 2. Disegna pedine ferme
+        //  Disegna pedine ferme 
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 int piece = board[r][c];
-                if (piece == 0) continue; 
-                    if (isDragging && r == dragFromRow && c == dragFromCol) continue;
+                if (piece == 0) continue; // Salta caselle vuote
+                
+                // Nascondi pedina originale durante il drag
+                if (isDragging && r == dragFromRow && c == dragFromCol) continue;
 
-                    Vector2 center = {
-                        (float)(c * CELL_SIZE + CELL_SIZE/2), 
-                        (float)(r * CELL_SIZE + CELL_SIZE/2)
-                                    };
+                Vector2 center = {
+                    (float)(c * CELL_SIZE + CELL_SIZE/2), 
+                    (float)(r * CELL_SIZE + CELL_SIZE/2)
+                };
+
                 Color fillColor, borderColor;
                 if (piece == 1) {           // Pedina Bianca
                     fillColor = WHITE;
                     borderColor = DARKGRAY;
                 }
-                else if (piece == 3) {      // Dama Bianca (GIALLO!)
+                else if (piece == 3) {      // Dama Bianca
                     fillColor = GOLD;
                     borderColor = ORANGE;
                 }
-                else if (piece == 2) {      // Pedina Nera (IA)
+                else if (piece == 2) {      // Pedina Nera
                     fillColor = BLACK;
                     borderColor = GRAY;
                 }
@@ -189,22 +208,23 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
                 else continue;
 
                 DrawCircleV(center, PIECE_RADIUS, fillColor);
-                DrawCircleLinesV(center, PIECE_RADIUS, fillColor);
-
+                DrawCircleLinesV(center, PIECE_RADIUS, borderColor); 
             }
         }
 
-        // 3. Disegna "fantasma" della pedina trascinata
+        //  Disegna "fantasma" della pedina trascinata
         if (isDragging) {
             DrawCircleV(mouse, PIECE_RADIUS, (Color){255, 255, 255, 180});
             DrawCircleLinesV(mouse, PIECE_RADIUS, RED);
         }
 
-        if(isPlayerTurn) {
+        //  UI Turno
+        if (isPlayerTurn) {
             DrawRectangle(0, 0, 150, 30, (Color){255, 255, 255, 200});
             DrawText("TOCCA A TE!", 10, 5, 20, BLACK);
         } else {
             DrawRectangle(0, 0, 150, 30, (Color){0, 0, 0, 200});
+            DrawText("IA STA PENSANDO...", 10, 5, 16, WHITE);
         }
 
         EndDrawing();

@@ -63,6 +63,42 @@ bool eat (int board[8][8], int fromrow, int torow, int fromcol, int tocol){
     return true;
 }
 
+bool has_any_capture(int board[8][8], int player_color){
+    int king_val = (player_color == 1) ? 3 : 4;
+    int enemy = (player_color == 1) ? 2 : 1;
+    int enemy_k = (player_color == 1) ? 4 : 3;
+
+    for (int r = 0; r < 8; r++){
+        for (int c = 0; c < 8; c++){
+            int piece = board[r][c];
+            if(piece != player_color && piece != king_val) continue;
+
+            int dr_list[4] = {-2, -2, 2, 2};
+            int dc_list[4] = {-2, 2, -2, 2};
+
+            for(int i = 0; i < 4; i++){
+                int nr = r + dr_list[i];
+                int nc = c + dc_list[i];
+
+                if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;
+                if (board[nr][nc] != 0) continue;
+
+                int mid_r = r + dr_list[i] / 2;
+                int mid_c = c + dc_list[i] / 2;
+                if(board[mid_r][mid_c] != enemy && board[mid_r][mid_c] != enemy_k) continue;
+
+                if(piece == player_color) {
+                    if(player_color == 1 && dr_list[i] != 2)continue;
+                    if(player_color == 2 && dr_list[i] != -2)continue;
+                }
+                return true;
+            }
+
+        }
+    }
+    return false;
+}
+
 bool dama(int board[8][8], int fromrow, int fromcol, int torow, int tocol){
 if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
     int piece = board[fromrow][fromcol];
