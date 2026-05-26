@@ -127,6 +127,12 @@ bool check_promotion(int board[8][8], int row, int col) {
         printf("Promozione a Dama! (%d, %d)\n", row, col);
         return true;
     }
+
+    if (board[row][col] == 2 && row == 7) {
+        board[row][col] == 4;
+        printf("promozione a Dama [nemico] (%d, %d)\n", row, col);
+        return true;
+    }
     return false;
 }
 
@@ -155,9 +161,4 @@ void apply_ai_move(int board[8][8], int fromRow, int fromCol, int toRow, int toC
 
     board[fromRow][fromCol] = 0;
     board[toRow][toCol] = piece;
-
-    if (piece == 2 && toRow == 0) {
-        board[toRow][toCol] = 4; // 4 = Dama Nera
-        printf("avversario promuove a Dama Nera! (%d, %d)\n", toRow, toCol);
-    }
 }

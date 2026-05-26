@@ -73,7 +73,7 @@ int main(void) {
     //AUTO-CATTURA: Scansiona le diagonali verso il basso
     // Bianco si muove verso righe maggiori (+1). Controlla le 2 diagonali.
     int dr = -1; 
-    int dc_opts[2] = {-1, 1};
+    int dc_opts[2] = {1, -1};
 
     for(int i = 0; i < 2; i++) {
         int midR = dragFromRow + dr;
