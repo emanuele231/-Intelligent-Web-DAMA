@@ -218,12 +218,31 @@ int main(void) {
             DrawCircleLinesV(mouse, PIECE_RADIUS, RED);
         }
 
-        //  UI Turno
+        //header
+        int screenWidth = GetScreenWidth();
+        int headerH = 35;
+        DrawRectangle(0, 0, screenWidth, headerH, (Color){18, 18, 30, 255});
+
+        Rectangle oppBtn = {GetScreenWidth() - 140, 5, 130, 25};
+        bool isHovering = CheckCollisionPointRec(GetMousePosition(), oppBtn);
+        DrawRectangleRec(oppBtn, isHovering ? (Color){50, 50, 85, 255} : (Color){35, 35, 60, 255});
+        DrawRectangleLinesEx(oppBtn, 1.5f, WHITE);
+        DrawText("UCB1-02", oppBtn.x + 8, oppBtn.y + 6, 12, WHITE);
+
+        if (isHovering && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            //TODO - Menu in cui si visualizzano le ia
+        }
+
+        const char* aiName = "UCB1-0.2";
+        int nameWidth = MeasureText(aiName, 22);
+        DrawText(aiName, (screenWidth - nameWidth) / 2, 7, 22, (Color){125, 211, 252, 255});
+
+        int turnY = headerH + 16;
         if (isPlayerTurn) {
-            DrawRectangle(0, 0, 150, 30, (Color){255, 255, 255, 200});
-            DrawText("TOCCA A TE!", 10, 5, 20, BLACK);
+            DrawRectangle(0, turnY, 150, 30, (Color){255, 255, 255, 200});
+            DrawText("TOCCA A TE!", 10, 5, 20, WHITE);
         } else {
-            DrawRectangle(0, 0, 150, 30, (Color){0, 0, 0, 200});
+            DrawRectangle(0, turnY, 150, 30, (Color){0, 0, 0, 200});
             DrawText("IA STA PENSANDO...", 10, 5, 16, WHITE);
         }
 
