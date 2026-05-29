@@ -17,6 +17,8 @@ MemoryPool ai_pool;
 
 bool isPlayerTurn = true;
 bool isIAthinking = false;
+bool showHeader = true;
+bool firstMoveDone = false;
 
 // Stato scacchiera: 0=vuota, 1=pedina bianca, 2=nera, 3=dama bianca, 4=dama nera
 int board[8][8] = {0};
@@ -52,6 +54,9 @@ int main(void) {
     init_board();
 
     while (!WindowShouldClose()) {
+        if(IsKeyPressed(KEY_Q)){
+        showHeader = !showHeader;
+    }
         Vector2 mouse = GetMousePosition();
         screen_to_grid((int)mouse.x, (int)mouse.y, &hoverRow, &hoverCol);
 
@@ -116,6 +121,11 @@ int main(void) {
     //  Gestione post-mossa
     if(successo) {
         check_promotion(board, finalRow, finalCol);
+        if (!firstMoveDone) {
+            firstMoveDone = true;
+            showHeader = false;
+        }
+
         isPlayerTurn = false;
         isIAthinking = true;
     }
@@ -219,9 +229,9 @@ int main(void) {
         }
 
         //header
-        int screenWidth = GetScreenWidth();
-        int headerH = 35;
-        DrawRectangle(0, 0, screenWidth, headerH, (Color){18, 18, 30, 255});
+    if (showHeader) {
+        int headerH = 40;
+        DrawRectangle(0, 0, SCREEN_WIDTH, headerH, (Color){0, 0, 0, 150});
 
         Rectangle oppBtn = {GetScreenWidth() - 140, 5, 130, 25};
         bool isHovering = CheckCollisionPointRec(GetMousePosition(), oppBtn);
@@ -235,7 +245,7 @@ int main(void) {
 
         const char* aiName = "UCB1-0.2";
         int nameWidth = MeasureText(aiName, 22);
-        DrawText(aiName, (screenWidth - nameWidth) / 2, 7, 22, (Color){125, 211, 252, 255});
+        DrawText(aiName, (SCREEN_WIDTH - nameWidth) / 2, 7, 22, (Color){125, 211, 252, 255});
 
         int turnY = headerH + 16;
         if (isPlayerTurn) {
@@ -248,6 +258,7 @@ int main(void) {
 
         EndDrawing();
     }
+}
 
     CloseWindow();
     return 0;
