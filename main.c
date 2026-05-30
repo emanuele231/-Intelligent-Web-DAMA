@@ -255,10 +255,10 @@ int main(void) {
             DrawRectangle(0, turnY, 150, 30, (Color){0, 0, 0, 200});
             DrawText("IA STA PENSANDO...", 10, 5, 16, WHITE);
         }
+    }
 
         EndDrawing();
     }
-}
 
     CloseWindow();
     return 0;
