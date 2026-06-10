@@ -1,8 +1,16 @@
 #ifndef MOVES_H
 #define MOVES_H
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "Piece.h"
+
+
+typedef struct {
+    uint8_t from;
+    uint8_t to;
+    uint8_t capture;
+} Move;
 
 
 bool move(int board[8][8], int fromrow, int fromcol, int torow, int tocol);
