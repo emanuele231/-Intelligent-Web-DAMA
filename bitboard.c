@@ -1,5 +1,5 @@
 #include "bitboard.h"
-#include "UCB1vers1.h"
+#include "mcts_core.h"
 #include <stdio.h>
 
 static inline int to_bit(int r, int c) { return r * 8 + c; }

@@ -1,17 +1,28 @@
+#define NOGDI
+#define WIN32_LEAN_AND_MEAN
+
 #include "ai_engine.h"
-#include "UCB1.h"
+#include "UCB1.h"  
+#include "bitboard.h"   
+#include "moves.h" 
+
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <float.h>
-#include <windows.h>
+
 
 typedef struct {
     MemoryPool pool;
     AIConfig cfg;
 } UCB1Instance;
 
-//-----------CALCOLO VALORE UCB1 DI UN NODO
+// ============================================================================
+// CORE MCTS – Calcolo Punteggi e Selezione
+// ============================================================================
+
+// Calcola il valore UCB1 di un nodo (exploitation + exploration)
 static double ucb1_score(MCTSNode *node, double parent_visits) {
     if (node->visits == 0) return DBL_MAX;
     double exploitation = node->wins / node->visits;
@@ -19,7 +30,7 @@ static double ucb1_score(MCTSNode *node, double parent_visits) {
     return exploitation + exploration;
 }
 
-//----------------SELEZIONE FIGLIO CON PUNTEGGIO MASSIMO
+// Seleziona il figlio con il punteggio UCB1 massimo
 static MCTSNode* select_best_child(MCTSNode *parent) {
     if (!parent || parent->num_children == 0) return NULL;
     MCTSNode *best = parent->children[0];
@@ -31,7 +42,7 @@ static MCTSNode* select_best_child(MCTSNode *parent) {
     return best;
 }
 
-//-------------------SIMULAZIONE DELLA PARTITA 
+// Simula una partita veloce per ottenere un reward (1.0/0.0/0.5)
 static double simulate_rollout(Bitboard *state) {
     int b_cnt = 0, w_cnt = 0;
     uint64_t tb = state->black | state->black_k;
@@ -49,12 +60,11 @@ static double simulate_rollout(Bitboard *state) {
     return 0.5;
 }
 
+// ============================================================================
+// GENERAZIONE MOSSE – Regole Dama Italiana
+// ============================================================================
 
-//==================================================
-// MOSSE
-//==================================================
-
-//CATTURA
+// Genera solo mosse di cattura (salto di 2 con pedina avversaria nel mezzo)
 static uint8_t generate_captures(Bitboard *bb, MCTSNode *children[], MemoryPool *pool) {
     uint64_t current = bb->black | bb->black_k;
     uint64_t opponent = bb->white | bb->white_k;
@@ -91,7 +101,7 @@ static uint8_t generate_captures(Bitboard *bb, MCTSNode *children[], MemoryPool 
     return count;
 }
 
-//MOVIMENTO
+// Genera mosse legali: priorità alle catture, altrimenti mosse semplici
 static uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPool *pool) {
     uint8_t cap_count = generate_captures(bb, children, pool);
     if (cap_count > 0) return cap_count;
@@ -123,40 +133,50 @@ static uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPo
     return count;
 }
 
-//==================================================
-// RICERCA E DECISIONE
-//==================================================
+// ============================================================================
+// RICERCA MCTS E DECISIONE FINALE
+// ============================================================================
 
-//----------------------------RICERCA
 static void mcts_search_impl(Bitboard *current_board, float time_limit, MemoryPool *pool, float ucb_c) {
     init_pool(pool);
     MCTSNode *root = alloc_node(pool);
     if (!root) return;
+    
     root->state = current_board;
     root->num_children = generate_legal_moves(current_board, root->children, pool);
     if (root->num_children == 0) return;
-    DWORD start = GetTickCount();
-    DWORD limit_ms = (DWORD)(time_limit * 1000);
+    
+    // Timer portabile: clock() invece di GetTickCount()
+    clock_t start = clock();
+    clock_t limit_clock = (clock_t)(time_limit * CLOCKS_PER_SEC);
+    
     while (1) {
-        if (GetTickCount() - start >= limit_ms) break;
+        // Controllo tempo portabile
+        if (clock() - start >= limit_clock) break;
+        
+        // SELECTION
         MCTSNode *current = root;
         while (current->num_children > 0) {
             MCTSNode *next = select_best_child(current);
             if (!next) break;
             current = next;
         }
+        
+        // SIMULATION
         double result = simulate_rollout(current->state);
+        
+        // BACKPROPAGATION
         MCTSNode *temp = current;
         while (temp != NULL) {
             temp->visits++;
             temp->wins += result;
-            result = 1.0 - result;
+            result = 1.0 - result;  // Inverte prospettiva
             temp = temp->parent;
         }
     }
 }
 
-//------------------ESTRAZIONE MOSSA CON PIUì VISITE
+// Estrae la mossa con il maggior numero di visite dalla root (con validazione sicurezza)
 static Move get_best_move_impl(MCTSNode *root, Bitboard *bb) {
     Move null_move = {255, 255, 0};
     if (!root || root->num_children == 0) return null_move;
@@ -172,25 +192,31 @@ static Move get_best_move_impl(MCTSNode *root, Bitboard *bb) {
     return null_move;
 }
 
-// === AI Engine Interface ===
+// ============================================================================
+// AI ENGINE INTERFACE – Wrapper per il sistema modulare
+// ============================================================================
+
+// Crea e inizializza un'istanza UCB1 con la sua MemoryPool e configurazione
 static AI_Instance* ucb1_create(const AIConfig* cfg) {
     UCB1Instance* inst = calloc(1, sizeof(UCB1Instance));
     inst->cfg = cfg ? *cfg : (AIConfig){.ucb_c=1.414f, .time_limit=0.2f, .max_nodes=40000};
     init_pool(&inst->pool);
     return (AI_Instance*)inst;
 }
-// === MOSSA ===
+
+// Calcola e restituisce la mossa: entry point unico per il gioco
 static Move ucb1_get_move(AI_Instance* instance, Bitboard* board, float time_budget) {
     UCB1Instance* inst = (UCB1Instance*)instance;
     mcts_search_impl(board, time_budget, &inst->pool, inst->cfg.ucb_c);
     return get_best_move_impl(&inst->pool.nodes[0], board);
 }
 
-
+// Libera la memoria dell'istanza UCB1
 static void ucb1_destroy(AI_Instance* instance) {
     free(instance);
 }
 
+// Definizione del motore UCB1 per il registry
 static const AIEngineDef ucb1_def = {
     .id = "ucb1_base",
     .name = "UCB1-0.2 (Base)",
@@ -202,4 +228,6 @@ static const AIEngineDef ucb1_def = {
     .destroy = ucb1_destroy
 };
 
-__attribute__((constructor)) void register_ucb1_base() { ai_register(&ucb1_def); }
+void register_ucb1_base(void) { 
+    ai_register(&ucb1_def); 
+}

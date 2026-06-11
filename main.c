@@ -5,9 +5,10 @@
 #include "moves.h"
 #include <time.h>
 #include "bitboard.h"
-#include "ai_engine.h"   // Interfaccia modulare IA
-#include "UCB1.h"        // Per register_ucb1_base()
-#include "params.h"      // Sistema configurazione generico
+#include "ai_engine.h"   
+#include "UCB1.h"        
+#include "params.h"  
+   
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
