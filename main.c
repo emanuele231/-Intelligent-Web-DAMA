@@ -8,6 +8,7 @@
 #include "ai_engine.h"   
 #include "UCB1.h"        
 #include "params.h"  
+#include "tournament.h"
    
 #include <stdio.h>
 #include <stdbool.h>

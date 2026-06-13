@@ -3,30 +3,49 @@
 
 #include <stdbool.h>
 #include <raylib.h>
-
-// 1. Includi PRIMA i tipi base per garantire che Move/Bitboard siano noti
 #include "bitboard.h"
 #include "moves.h"
 
-// 2. Dichiarazione opaca per l'istanza AI
-typedef struct AI_Instance AI_Instance;
+// Tipi di algoritmo
+typedef enum {
+    ALGO_UCB1_CLASSIC,
+    ALGO_UCB_DELTA,
+    ALGO_UCB_ALPHA,
+    ALGO_PUCT_STD,
+    ALGO_PUCT_EXP,
+    ALGO_PUCT_HEUR,
+    ALGO_PUCT_BAL,
+    ALGO_UCB_FAST
+} AlgoType;
 
-// 3. Configurazione
+// Configurazione COMPLETA (tutti i campi possibili)
 typedef struct {
-    float ucb_c;
-    float puct_c;
+    // Core
+    AlgoType algo;
     float time_limit;
-    int   max_nodes;
-    int   rollout_depth;
-    bool  use_heuristics;
+    int max_nodes;
+    bool use_heuristics;
+    
+    // Parametri formule UCB
+    float alpha;    
+    float delta;    
+    float ucb_c;    
+    
+    // Parametri PUCT
+    float cpuct;   
+    float puct_c;   
+    
+    // Rollout
+    int rollout_depth;
 } AIConfig;
 
-// 4. Puntatori a funzione (ora Move è sicuramente definito)
+// Interfaccia opaca
+typedef struct AI_Instance AI_Instance;
 typedef AI_Instance* (*AI_CreateFunc)(const AIConfig* cfg);
 typedef Move         (*AI_GetMoveFunc)(AI_Instance* inst, Bitboard* board, float time_budget);
 typedef void         (*AI_DestroyFunc)(AI_Instance* inst);
 
-// 5. Definizione motore
+// Definizione motore
 typedef struct {
     const char*     id;
     const char*     name;
@@ -38,10 +57,10 @@ typedef struct {
     AI_DestroyFunc  destroy;
 } AIEngineDef;
 
-// 6. API Registry
+// Registry API
 void                 ai_register(const AIEngineDef* def);
 const AIEngineDef*   ai_find(const char* id);
 int                  ai_count(void);
 const AIEngineDef**  ai_list_all(void);
 
-#endif // AI_ENGINE_H
+#endif
