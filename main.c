@@ -1,15 +1,17 @@
-#define NOGDI              // Disabilita Rectangle() di Windows GDI (conflitto con Raylib)
-#define WIN32_LEAN_AND_MEAN // Include Windows.h leggero
+#define NOGDI
+#define WIN32_LEAN_AND_MEAN
 
 #include "raylib.h"
 #include "moves.h"
 #include <time.h>
 #include "bitboard.h"
-#include "ai_engine.h"   
-#include "UCB1.h"        
-#include "params.h"  
+#include "ai_engine.h"
+#include "UCB1.h"
+#include "params.h"
 #include "tournament.h"
-   
+#include "mcts_core.h"
+#include "variants.h"
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -38,8 +40,11 @@ float aiTimeLimit = 0.2f;
 Color headerColor = {0, 0, 0, 150};
 
 // UI Menu
-bool showAIMenu = false;
-Rectangle aiMenuRect = {0};
+bool showConfigMenu = false;
+
+// Selezione temporanea (prima di applicare)
+int temp_engine_idx = 0;
+float temp_time = 0.2f;
 
 // Board: 0=vuota, 1=bianco, 2=nero, 3=dama bianca, 4=dama nera
 int board[8][8] = {0};
@@ -74,7 +79,7 @@ void reset_game(void) {
     firstMoveDone = false;
     showHeader = true;
     init_pool(&ai_pool);
-    printf("🔄 Partita resettata! IA: %s\n", current_engine ? current_engine->name : "N/A");
+    printf("Partita resettata! IA: %s\n", current_engine ? current_engine->name : "N/A");
 }
 
 void screen_to_grid(int mouseX, int mouseY, int *row, int *col) {
@@ -86,32 +91,21 @@ void screen_to_grid(int mouseX, int mouseY, int *row, int *col) {
 
 // Inizializza sistema IA + carica parametri da file
 void init_ai_system(void) {
-    // 1. Carica parametri generici da config.cfg (fallback su default)
     params_load("config.cfg");
-    
-    // 2. Registra le IA disponibili (esplicito per compatibilità MSVC)
-    register_ucb1_base();
+    register_all_variants();
     
     if (ai_count() > 0) {
         const AIEngineDef** all = ai_list_all();
         current_engine = all[0];
         current_engine_idx = 0;
         
-        // 3. Costruisci AIConfig usando parametri caricati (con fallback)
-        AIConfig cfg = {
-            .ucb_c = params_get_float("ucb_c", current_engine->default_cfg.ucb_c),
-            .puct_c = params_get_float("puct_c", current_engine->default_cfg.puct_c),
-            .time_limit = params_get_float("time_limit", current_engine->default_cfg.time_limit),
-            .max_nodes = params_get_int("max_nodes", current_engine->default_cfg.max_nodes),
-            .rollout_depth = params_get_int("rollout_depth", current_engine->default_cfg.rollout_depth),
-            .use_heuristics = params_get_bool("use_heuristics", current_engine->default_cfg.use_heuristics)
-        };
+        AIConfig cfg = current_engine->default_cfg;
         
         current_ai_instance = current_engine->create(&cfg);
         aiTimeLimit = cfg.time_limit;
         headerColor = current_engine->header_color;
         
-        printf("🚀 IA avviata: %s | ucb_c=%.3f | time=%.2fs | nodes=%d\n",
+        printf("IA avviata: %s | ucb_c=%.3f | time=%.2fs | nodes=%d\n",
                current_engine->name, cfg.ucb_c, cfg.time_limit, cfg.max_nodes);
     }
 }
@@ -138,57 +132,182 @@ int main(void) {
         // Pulsante selezione IA (in alto a destra)
         Rectangle oppBtn = {GetScreenWidth() - 140, 8, 130, 24};
 
-        // === MENU: Click sul pulsante apre menu e PAUSA il gioco ===
+        // === MENU: Click sul pulsante apre menu ===
         if (showHeader && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mouse, oppBtn)) {
-            showAIMenu = true;
-            int count = ai_count();
-            float item_h = 30;
-            float menu_h = count * item_h + 40;
-            aiMenuRect = (Rectangle){SCREEN_WIDTH/2 - 120, SCREEN_HEIGHT/2 - menu_h/2, 240, menu_h};
+            showConfigMenu = true;
+            // Inizializza selezione temporanea con valori correnti
+            temp_engine_idx = current_engine_idx;
+            temp_time = aiTimeLimit;
         }
 
-        // === GESTIONE MENU (se aperto, il gioco è in pausa) ===
-        if (showAIMenu) {
+        // === SCHERMATA CONFIGURAZIONE IA ===
+        if (showConfigMenu) {
+            BeginDrawing();
+            ClearBackground((Color){20, 20, 30, 255});
+            
+            // Titolo schermata
+            DrawText("CONFIGURA INTELLIGENZA ARTIFICIALE", SCREEN_WIDTH/2 - 180, 20, 24, (Color){100, 150, 255, 255});
+            DrawText("Seleziona variante e tempo di analisi", SCREEN_WIDTH/2 - 140, 50, 16, LIGHTGRAY);
+            
             const AIEngineDef** all = ai_list_all();
             int count = ai_count();
-            float item_h = 30;
             
+            // === COLONNA SINISTRA: UCB1 ===
+            DrawRectangle(60, 90, 240, 320, (Color){40, 50, 70, 255});
+            DrawRectangleLines(60, 90, 240, 320, (Color){125, 211, 252, 255});
+            DrawText("UCB1 VARIANTS", 110, 95, 18, (Color){125, 211, 252, 255});
+            
+            const char* ucb_names[] = {"Classic", "Delta", "Alpha", "Fast"};
+            Rectangle ucb_btns[4];
+            for (int i = 0; i < 4 && i < count; i++) {
+                ucb_btns[i] = (Rectangle){70, 125 + i*65, 220, 55};
+                bool selected = (temp_engine_idx == i);
+                DrawRectangleRec(ucb_btns[i], selected ? (Color){0, 100, 200, 220} : (Color){50, 60, 80, 200});
+                DrawRectangleLinesEx(ucb_btns[i], selected ? 2 : 1, selected ? WHITE : (Color){125, 211, 252, 255});
+                DrawText(ucb_names[i], ucb_btns[i].x + 10, ucb_btns[i].y + 10, 16, selected ? WHITE : (Color){150, 200, 255, 255});
+                
+                // Descrizione
+                const char* desc = "";
+                if (i == 0) desc = "Standard (C=1.414)";
+                else if (i == 1) desc = "Delta (confidenza)";
+                else if (i == 2) desc = "Alpha (C variabile)";
+                else if (i == 3) desc = "Ottimizzato veloce";
+                DrawText(desc, ucb_btns[i].x + 10, ucb_btns[i].y + 32, 11, LIGHTGRAY);
+            }
+            
+            // === COLONNA DESTRA: PUCT ===
+            DrawRectangle(340, 90, 240, 320, (Color){70, 50, 40, 255});
+            DrawRectangleLines(340, 90, 240, 320, (Color){255, 140, 0, 255});
+            DrawText("PUCT VARIANTS", 390, 95, 18, (Color){255, 140, 0, 255});
+            
+            const char* puct_names[] = {"Standard", "Explorative", "Heuristic", "Balanced"};
+            Rectangle puct_btns[4];
+            for (int i = 0; i < 4 && (4+i) < count; i++) {
+                puct_btns[i] = (Rectangle){350, 125 + i*65, 220, 55};
+                bool selected = (temp_engine_idx == 4+i);
+                DrawRectangleRec(puct_btns[i], selected ? (Color){200, 100, 0, 220} : (Color){80, 60, 50, 200});
+                DrawRectangleLinesEx(puct_btns[i], selected ? 2 : 1, selected ? WHITE : (Color){255, 140, 0, 255});
+                DrawText(puct_names[i], puct_btns[i].x + 10, puct_btns[i].y + 10, 16, selected ? WHITE : (Color){255, 180, 100, 255});
+                
+                // Descrizione
+                const char* desc = "";
+                if (i == 0) desc = "Standard (C=1.2)";
+                else if (i == 1) desc = "Alta esplorazione";
+                else if (i == 2) desc = "Con euristiche";
+                else if (i == 3) desc = "Bilanciato (C=1.2)";
+                DrawText(desc, puct_btns[i].x + 10, puct_btns[i].y + 32, 11, LIGHTGRAY);
+            }
+            
+            // === SELEZIONE TEMPO ===
+            DrawRectangle(140, 430, 360, 70, (Color){40, 40, 50, 255});
+            DrawRectangleLines(140, 430, 360, 70, WHITE);
+            DrawText("TEMPO DI ANALISI", 245, 438, 16, WHITE);
+            
+            Rectangle btnT02 = {160, 460, 90, 35};
+            Rectangle btnT1 = {275, 460, 90, 35};
+            Rectangle btnT3 = {390, 460, 90, 35};
+            
+            bool t02 = (temp_time == 0.2f), t1 = (temp_time == 1.0f), t3 = (temp_time == 3.0f);
+            
+            DrawRectangleRec(btnT02, t02 ? (Color){0, 180, 100, 220} : (Color){60, 60, 70, 200});
+            DrawText("0.2s", btnT02.x + 25, btnT02.y + 10, 16, t02 ? WHITE : LIGHTGRAY);
+            DrawText("Fast", btnT02.x + 28, btnT02.y + 26, 10, LIGHTGRAY);
+            
+            DrawRectangleRec(btnT1, t1 ? (Color){0, 180, 100, 220} : (Color){60, 60, 70, 200});
+            DrawText("1.0s", btnT1.x + 28, btnT1.y + 10, 16, t1 ? WHITE : LIGHTGRAY);
+            DrawText("Medium", btnT1.x + 22, btnT1.y + 26, 10, LIGHTGRAY);
+            
+            DrawRectangleRec(btnT3, t3 ? (Color){0, 180, 100, 220} : (Color){60, 60, 70, 200});
+            DrawText("3.0s", btnT3.x + 28, btnT3.y + 10, 16, t3 ? WHITE : LIGHTGRAY);
+            DrawText("Strong", btnT3.x + 24, btnT3.y + 26, 10, LIGHTGRAY);
+            
+            // === PULSANTI AZIONE ===
+            Rectangle btnApply = {180, 520, 120, 40};
+            Rectangle btnCancel = {340, 520, 120, 40};
+            
+            DrawRectangleRec(btnApply, (Color){0, 180, 80, 220});
+            DrawRectangleLinesEx(btnApply, 2, WHITE);
+            DrawText("APPLICA", btnApply.x + 25, btnApply.y + 12, 18, WHITE);
+            
+            DrawRectangleRec(btnCancel, (Color){180, 50, 50, 220});
+            DrawRectangleLinesEx(btnCancel, 2, WHITE);
+            DrawText("ANNULLA", btnCancel.x + 20, btnCancel.y + 12, 18, WHITE);
+            
+            // === GESTIONE INPUT ===
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                bool selected = false;
-                for (int i = 0; i < count; i++) {
-                    Rectangle opt = {aiMenuRect.x + 20, aiMenuRect.y + 35 + i*item_h, aiMenuRect.width - 40, item_h - 5};
-                    if (CheckCollisionPointRec(mouse, opt)) {
-                        if (current_ai_instance && current_engine) {
-                            current_engine->destroy(current_ai_instance);
-                        }
-                        current_engine_idx = i;
-                        current_engine = all[i];
-                        
-                        // Ricrea istanza con parametri aggiornati
-                        AIConfig cfg = {
-                            .ucb_c = params_get_float("ucb_c", current_engine->default_cfg.ucb_c),
-                            .puct_c = params_get_float("puct_c", current_engine->default_cfg.puct_c),
-                            .time_limit = params_get_float("time_limit", current_engine->default_cfg.time_limit),
-                            .max_nodes = params_get_int("max_nodes", current_engine->default_cfg.max_nodes),
-                            .rollout_depth = params_get_int("rollout_depth", current_engine->default_cfg.rollout_depth),
-                            .use_heuristics = params_get_bool("use_heuristics", current_engine->default_cfg.use_heuristics)
-                        };
-                        
-                        current_ai_instance = current_engine->create(&cfg);
-                        aiTimeLimit = cfg.time_limit;
-                        headerColor = current_engine->header_color;
-                        showAIMenu = false;
-                        reset_game();
-                        selected = true;
-                        break;
+                // Click UCB1
+                for (int i = 0; i < 4 && i < count; i++) {
+                    if (CheckCollisionPointRec(mouse, ucb_btns[i])) {
+                        temp_engine_idx = i;
                     }
                 }
-                if (!selected) showAIMenu = false;
+                
+                // Click PUCT
+                for (int i = 0; i < 4 && (4+i) < count; i++) {
+                    if (CheckCollisionPointRec(mouse, puct_btns[i])) {
+                        temp_engine_idx = 4 + i;
+                    }
+                }
+                
+                // Click tempo
+                if (CheckCollisionPointRec(mouse, btnT02)) temp_time = 0.2f;
+                if (CheckCollisionPointRec(mouse, btnT1)) temp_time = 1.0f;
+                if (CheckCollisionPointRec(mouse, btnT3)) temp_time = 3.0f;
+                
+                // Click APPLICA
+                if (CheckCollisionPointRec(mouse, btnApply)) {
+                    // Distruggi vecchia istanza
+                    if (current_ai_instance && current_engine) {
+                        current_engine->destroy(current_ai_instance);
+                    }
+                    
+                    // Crea nuova configurazione
+                    AIConfig newCfg = {0};
+                    newCfg.time_limit = temp_time;
+                    newCfg.max_nodes = (int)(temp_time * 40000);
+                    newCfg.use_heuristics = false;
+                    
+                    if (temp_engine_idx < 4) {
+                        newCfg.algo = ALGO_UCB1_CLASSIC;
+                        newCfg.ucb_c = 1.414f;
+                        if (temp_engine_idx == 1) newCfg.algo = ALGO_UCB_DELTA;
+                        if (temp_engine_idx == 2) newCfg.algo = ALGO_UCB_ALPHA;
+                        if (temp_engine_idx == 3) newCfg.algo = ALGO_UCB_FAST;
+                    } else {
+                        newCfg.algo = ALGO_PUCT_STD;
+                        newCfg.cpuct = 1.2f;
+                        if (temp_engine_idx == 5) newCfg.algo = ALGO_PUCT_EXP;
+                        if (temp_engine_idx == 6) {
+                            newCfg.algo = ALGO_PUCT_HEUR;
+                            newCfg.use_heuristics = true;
+                        }
+                        if (temp_engine_idx == 7) newCfg.algo = ALGO_PUCT_BAL;
+                    }
+                    
+                    current_ai_instance = mcts_create(&newCfg);
+                    current_engine_idx = temp_engine_idx;
+                    current_engine = all[temp_engine_idx];
+                    aiTimeLimit = temp_time;
+                    headerColor = (temp_engine_idx < 4) ? 
+                        (Color){0, 100, 200, 150} : (Color){200, 100, 0, 150};
+                    
+                    printf("IA configurata: %s | Tempo: %.1fs\n", current_engine->name, temp_time);
+                    showConfigMenu = false;
+                    reset_game();
+                }
+                
+                // Click ANNULLA
+                if (CheckCollisionPointRec(mouse, btnCancel)) {
+                    showConfigMenu = false;
+                }
             }
+            
+            EndDrawing();
+            continue;  // Salta il rendering del gioco
         }
 
         // === LOGICA DI GIOCO (solo se menu CHIUSO) ===
-        if (!showAIMenu) {
+        if (!showConfigMenu) {
             // INPUT: Inizio drag
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && isPlayerTurn) {
                 int piece = board[hoverRow][hoverCol];
@@ -204,7 +323,6 @@ int main(void) {
                 bool successo = false;
                 int finalRow = -1, finalCol = -1;
 
-                // AUTO-CATTURA: Diagonali verso il BASSO (bianco scende: riga +1)
                 int dr = 1;
                 int dc_opts[2] = {-1, 1};
 
@@ -221,7 +339,7 @@ int main(void) {
                             board[landR][landC] = 1;
                             finalRow = landR; finalCol = landC;
                             successo = true;
-                            printf("✅ Cattura: nera in (%d,%d) rimossa!\n", midR, midC);
+                            printf("Cattura: nera in (%d,%d) rimossa!\n", midR, midC);
                             break;
                         }
                     }
@@ -231,11 +349,11 @@ int main(void) {
                     int destRow = hoverRow; int destCol = hoverCol;
                     if(dragFromRow != destRow || dragFromCol != destCol) {
                         if(dama(board, dragFromRow, dragFromCol, destRow, destCol)) {
-                            printf("✅ Mossa Dama!\n"); successo = true; finalRow = destRow; finalCol = destCol;
+                            printf("Mossa Dama!\n"); successo = true; finalRow = destRow; finalCol = destCol;
                         } else if(move(board, dragFromRow, dragFromCol, destRow, destCol)) {
-                            printf("✅ Mossa Pedina!\n"); successo = true; finalRow = destRow; finalCol = destCol;
+                            printf("Mossa Pedina!\n"); successo = true; finalRow = destRow; finalCol = destCol;
                         } else {
-                            printf("❌ Mossa non valida.\n");
+                            printf("Mossa non valida.\n");
                         }
                     }
                 }
@@ -248,7 +366,7 @@ int main(void) {
                 isDragging = false; dragFromRow = -1; dragFromCol = -1;
             }
 
-            // LOGICA IA (Modulare: chiama engine->get_move)
+            // LOGICA IA
             if (!isPlayerTurn && isIAthinking) {
                 static clock_t ai_start = 0;
                 static Bitboard ai_state;
@@ -267,7 +385,7 @@ int main(void) {
             }
         }
 
-        // === RENDERING ===
+        // === RENDERING GIOCO ===
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
@@ -305,7 +423,7 @@ int main(void) {
             DrawCircleLinesV(mouse, PIECE_RADIUS, RED);
         }
 
-        // 4. HEADER (condizionale)
+        // 4. HEADER
         if (showHeader) {
             int headerH = 40;
             DrawRectangle(0, 0, SCREEN_WIDTH, headerH, headerColor);
@@ -315,8 +433,7 @@ int main(void) {
             DrawText("CAMBIA IA", oppBtn.x + 25, oppBtn.y + 5, 12, WHITE);
 
             const char* aiName = current_engine ? current_engine->name : "Dama AI";
-            Color nameColor = (current_engine_idx == 0) ? (Color){125, 211, 252, 255} : (Color){255, 140, 0, 255};
-            DrawText(aiName, (SCREEN_WIDTH - MeasureText(aiName, 24))/2, 10, 24, nameColor);
+            DrawText(aiName, (SCREEN_WIDTH - MeasureText(aiName, 24))/2, 10, 24, headerColor.r < 100 ? (Color){125, 211, 252, 255} : (Color){255, 140, 0, 255});
 
             int turnX = 15, turnY = headerH + 8;
             if (isPlayerTurn) {
@@ -328,29 +445,6 @@ int main(void) {
             }
         }
 
-        // 5. MENU OVERLAY
-        if (showAIMenu) {
-            DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, (Color){0, 0, 0, 160});
-            DrawRectangleRec(aiMenuRect, (Color){35, 35, 35, 255});
-            DrawRectangleLinesEx(aiMenuRect, 2, WHITE);
-            DrawText("SELEZIONA IA", aiMenuRect.x + 70, aiMenuRect.y + 18, 14, WHITE);
-
-            const AIEngineDef** all = ai_list_all();
-            int count = ai_count();
-            float item_h = 30;
-            
-            for (int i = 0; i < count; i++) {
-                Rectangle opt = {aiMenuRect.x + 20, aiMenuRect.y + 35 + i*item_h, aiMenuRect.width - 40, item_h - 5};
-                bool hover = CheckCollisionPointRec(mouse, opt);
-                DrawRectangleRec(opt, hover ? (Color){70, 70, 110, 255} : (Color){50, 50, 50, 255});
-                
-                const char* suffix = (i == current_engine_idx) ? " ← ATTIVA" : "";
-                char label[64];
-                snprintf(label, sizeof(label), "%s%s", all[i]->name, suffix);
-                DrawText(label, opt.x + 15, opt.y + 8, 12, (i == current_engine_idx) ? GOLD : WHITE);
-            }
-        }
-
         EndDrawing();
     }
 
@@ -358,7 +452,7 @@ int main(void) {
     if (current_ai_instance && current_engine) {
         current_engine->destroy(current_ai_instance);
     }
-    params_save("config.cfg"); // Salva eventuali modifiche runtime
+    params_save("config.cfg");
 
     CloseWindow();
     return 0;
