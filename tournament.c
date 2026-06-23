@@ -2,28 +2,19 @@
 #include "bitboard.h"
 #include "moves.h"
 #include "params.h"
+#include "tournament.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
-// Struttura per i risultati
-typedef struct {
-    const char* engine_name;
-    int wins;
-    int losses;
-    int draws;
-} TournamentResult;
 
-// ============================================================================
-// HELPER LOCALI (Per evitare dipendenze da funzioni non esposte in moves.h)
-// ============================================================================
-
-static void tournament_init_board(int board[8][8]) {
+// Inizializza board standard
+static void init_tournament_board(int board[8][8]) {
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
             if ((r + c) % 2 != 0) {
-                if (r >= 5) board[r][c] = 1;      // Bianco
-                else if (r <= 2) board[r][c] = 2; // Nero
+                if (r >= 5) board[r][c] = 1;
+                else if (r <= 2) board[r][c] = 2;
                 else board[r][c] = 0;
             } else {
                 board[r][c] = 0;
@@ -32,110 +23,112 @@ static void tournament_init_board(int board[8][8]) {
     }
 }
 
-// Controllo semplice: il giocatore ha ancora pedine?
-static int has_pieces(int board[8][8], int player_val) {
-    for (int r = 0; r < 8; r++)
-        for (int c = 0; c < 8; c++)
-            if (board[r][c] == player_val) return 1;
-    return 0;
-}
-
-// ============================================================================
-// LOGICA DI GIOCO
-// ============================================================================
-
-static int play_game(const AIEngineDef* engine1, const AIEngineDef* engine2, float time_limit) {
-    int board[8][8] = {0};
-    tournament_init_board(board);
+// Gioca una singola partita
+double play_tournament_game(const AIEngineDef* engine_white, 
+                            const AIEngineDef* engine_black, 
+                            float time_limit, 
+                            int max_moves) {
+    int board[8][8];
+    init_tournament_board(board);
     
-    // Config
-    AIConfig cfg1 = engine1->default_cfg;
-    AIConfig cfg2 = engine2->default_cfg;
-    cfg1.time_limit = time_limit;
-    cfg2.time_limit = time_limit;
+    // Crea istanze
+    AIConfig cfg_w = engine_white->default_cfg;
+    AIConfig cfg_b = engine_black->default_cfg;
+    cfg_w.time_limit = time_limit;
+    cfg_b.time_limit = time_limit;
     
-    // Creazione istanze
-    AI_Instance* ai1 = engine1->create(&cfg1);
-    AI_Instance* ai2 = engine2->create(&cfg2);
+    AI_Instance* ai_white = engine_white->create(&cfg_w);
+    AI_Instance* ai_black = engine_black->create(&cfg_b);
     
-    if (!ai1 || !ai2) return -2;
+    if (!ai_white || !ai_black) {
+        fprintf(stderr, "Errore creazione IA\n");
+        return 0.5;
+    }
     
-    bool is_player_turn = true; // 1 (Bianco) inizia
+    bool white_turn = true;
     int move_count = 0;
-    
-    // Limite massimo mosse per evitare loop infiniti
-    int max_moves = 60; 
     
     while (move_count < max_moves) {
         Bitboard bb;
         board_to_bitboard(board, &bb);
         
-        // Calcolo mossa
         Move move;
-        if (is_player_turn) {
-            move = engine1->get_move(ai1, &bb, time_limit);
+        if (white_turn) {
+            move = engine_white->get_move(ai_white, &bb, time_limit);
         } else {
-            move = engine2->get_move(ai2, &bb, time_limit);
+            move = engine_black->get_move(ai_black, &bb, time_limit);
         }
         
-        // Validazione minima mossa
+        // Mossa invalida -> sconfitta
         if (move.from == 255 || move.to == 255) {
-            // IA ha passato/abbandonato -> perde
-            return is_player_turn ? -1 : 1; 
+            engine_white->destroy(ai_white);
+            engine_black->destroy(ai_black);
+            return white_turn ? 0.0 : 1.0;
         }
         
-        // Applica mossa (Assumendo che apply_ai_move sia disponibile o implementala qui)
+        // Applica mossa
         apply_ai_move(board, move.from/8, move.from%8, move.to/8, move.to%8);
         check_promotion(board, move.to/8, move.to%8);
         
         // Controllo fine partita (pedine finite)
-        if (!has_pieces(board, 1)) return -1; // Nero vince
-        if (!has_pieces(board, 2)) return 1;  // Bianco vince
+        bool white_has = false, black_has = false;
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                if (board[r][c] == 1 || board[r][c] == 3) white_has = true;
+                if (board[r][c] == 2 || board[r][c] == 4) black_has = true;
+            }
+        }
         
-        // Cambio turno
-        is_player_turn = !is_player_turn;
+        if (!white_has) {
+            engine_white->destroy(ai_white);
+            engine_black->destroy(ai_black);
+            return 0.0;  // Vince nero
+        }
+        if (!black_has) {
+            engine_white->destroy(ai_white);
+            engine_black->destroy(ai_black);
+            return 1.0;  // Vince bianco
+        }
+        
+        white_turn = !white_turn;
         move_count++;
     }
     
-    return 0; // Patta per limite mosse
+    // Patta per limite mosse
+    engine_white->destroy(ai_white);
+    engine_black->destroy(ai_black);
+    return 0.5;
 }
 
-// ============================================================================
-// TORNEO
-// ============================================================================
-
-void run_tournament(const char* config_file) {
-    params_load(config_file);
-    float time_limit = params_get_float("time_limit_per_move", 0.1f);
-    int num_games = params_get_int("num_games_per_pair", 20);
+//applico il round robin per eseguire il torneo
+void run_tournament_headless(const AIEngineDef** engines, int num_engines, 
+                             int games_per_pair, float time_limit,
+                             TournamentResult* results) {
+    printf("\n=== INIZIO TORNEO ===\n");
+    printf("Partite per coppia: %d\n", games_per_pair);
+    printf("Tempo per mossa: %.1fs\n\n", time_limit);
     
-    int total_engines = ai_count();
-    if (total_engines < 2) {
-        fprintf(stderr, "Errore: Servono almeno 2 IA registrate.\n");
-        return;
-    }
+    int total_matches = (num_engines * (num_engines - 1)) / 2 * games_per_pair;
+    int match_count = 0;
     
-    // Inizializza risultati
-    TournamentResult results[16]; // Assumiamo max 16 IA
-    for(int i=0; i<total_engines; i++) {
-        results[i].engine_name = ai_list_all()[i]->name;
-        results[i].wins = results[i].losses = results[i].draws = 0;
-    }
-    
-    printf("\n=== AVVIO TORNEO (%d IA) ===\n", total_engines);
-    
-    // Round Robin
-    for (int i = 0; i < total_engines; i++) {
-        for (int j = i + 1; j < total_engines; j++) {
+    // Round-robin
+    for (int i = 0; i < num_engines; i++) {
+        for (int j = i + 1; j < num_engines; j++) {
             int wins_i = 0, wins_j = 0, draws = 0;
             
-            printf("Match: %s vs %s ... ", ai_list_all()[i]->name, ai_list_all()[j]->name);
+            printf("[%s] vs [%s]\n", engines[i]->name, engines[j]->name);
             
-            for (int k = 0; k < num_games; k++) {
-                int res = play_game(ai_list_all()[i], ai_list_all()[j], time_limit);
-                if (res == 1) wins_i++;
-                else if (res == -1) wins_j++;
+            for (int g = 0; g < games_per_pair; g++) {
+                double result = play_tournament_game(engines[i], engines[j], time_limit, 60);
+                
+                if (result > 0.9) wins_i++;
+                else if (result < 0.1) wins_j++;
                 else draws++;
+                
+                match_count++;
+                
+                // Aggiorna stato per UI (se necessario)
+                // Questo potrebbe essere passato come callback
             }
             
             results[i].wins += wins_i;
@@ -146,17 +139,62 @@ void run_tournament(const char* config_file) {
             results[j].losses += wins_i;
             results[j].draws += draws;
             
-            printf("%d - %d (%d patta)\n", wins_i, wins_j, draws);
+            printf("  Risultato: %d-%d (%d patte)\n\n", wins_i, wins_j, draws);
         }
     }
     
-    // Classifica
-    printf("\n=== CLASSIFICA ===\n");
-    for (int i = 0; i < total_engines; i++) {
+    // Stampa classifica
+    printf("\n=== CLASSIFICA FINALE ===\n");
+    printf("%-25s | %6s | %6s | %6s | %8s\n", "IA", "V", "P", "S", "WinRate");
+    printf("----------------------------------------------------------\n");
+    
+    for (int i = 0; i < num_engines; i++) {
         int total = results[i].wins + results[i].losses + results[i].draws;
-        float pct = total > 0 ? (float)results[i].wins / total * 100 : 0;
-        printf("%-20s | V: %2d | P: %2d | S: %2d | WinRate: %.1f%%\n", 
-               results[i].engine_name,
-               results[i].wins, results[i].draws, results[i].losses, pct);
+        float rate = total > 0 ? (float)results[i].wins / total * 100 : 0;
+        printf("%-25s | %6d | %6d | %6d | %7.1f%%\n", 
+               results[i].engine_name, 
+               results[i].wins, 
+               results[i].draws, 
+               results[i].losses, 
+               rate);
     }
+}
+
+//esportazione risultati
+void export_tournament_csv(TournamentResult* results, int count, const char* filename) {
+    FILE* f = fopen(filename, "w");
+    if (!f) {
+        fprintf(stderr, "Errore apertura file %s\n", filename);
+        return;
+    }
+    
+    fprintf(f, "Rank,IA,Wins,Draws,Losses,Total,WinRate\n");
+    
+    // Ordina per vittorie
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = 0; j < count - i - 1; j++) {
+            if (results[j].wins < results[j+1].wins) {
+                TournamentResult tmp = results[j];
+                results[j] = results[j+1];
+                results[j+1] = tmp;
+            }
+        }
+    }
+    
+    for (int i = 0; i < count; i++) {
+        int total = results[i].wins + results[i].losses + results[i].draws;
+        float rate = total > 0 ? (float)results[i].wins / total * 100 : 0;
+        
+        fprintf(f, "%d,%s,%d,%d,%d,%d,%.2f\n",
+                i + 1,
+                results[i].engine_name,
+                results[i].wins,
+                results[i].draws,
+                results[i].losses,
+                total,
+                rate);
+    }
+    
+    fclose(f);
+    printf("Risultati esportati in %s\n", filename);
 }
