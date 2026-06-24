@@ -2,271 +2,244 @@
 #define WIN32_LEAN_AND_MEAN
 
 #include "raylib.h"
+#include "variants.h"       
+#include "tournament.h"
 #include "ai_engine.h"
 #include "mcts_core.h"
-#include "tournament.h"
 #include "params.h"
-#include "params.h"
-#include "variants.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 700
+#define SCREEN_WIDTH 900
+#define SCREEN_HEIGHT 750
+#define MAX_MATCHES 8
 
-//stato torneo
 typedef struct {
-    bool running;
-    bool finished;
-    int current_match;
-    int total_matches;
-    TournamentResult* results;
-    int num_results;
-    char status_msg[128];
-} TournamentState;
+    int id;
+    const char* round_name;
+    const AIEngineDef* p1;
+    const AIEngineDef* p2;
+    const AIEngineDef* winner;
+    bool completed;
+    char result_text[64];
+} TournamentMatch;
 
-static TournamentState t_state = {0};
+static TournamentMatch matches[MAX_MATCHES];
+static int current_match = 0;
+static bool tournament_running = false;
+static bool tournament_finished = false;
+static float match_time_limit = 0.5f; // Tempo per mossa
+static int max_moves_limit = 40; 
 
-//FUNZIONI UI
+static const char* short_names[] = {
+    "UCB1-Classic", "UCB1-Delta", "UCB1-Alpha", "UCB1-Fast",
+    "PUCT-Std", "PUCT-Expl", "PUCT-Heur", "PUCT-Bal"
+};
 
-static void draw_header(void) {
-    DrawRectangle(0, 0, SCREEN_WIDTH, 60, (Color){30, 30, 50, 255});
-    DrawText("TORNEO INTELLIGENZE ARTIFICIALI - DAMA", 180, 15, 24, (Color){100, 200, 255, 255});
-    DrawText("Round-Robin Tournament", 280, 42, 14, LIGHTGRAY);
-}
 
-//sfondo
-static void draw_config_panel(void) {
-    Rectangle panel = {50, 80, 700, 120};
-    DrawRectangleRec(panel, (Color){40, 40, 60, 255});
-    DrawRectangleLinesEx(panel, 2, (Color){100, 150, 255, 255});
-    
-    DrawText("CONFIGURAZIONE TORNEO", panel.x + 20, panel.y + 10, 18, WHITE);
-    DrawText("Partite per coppia:", panel.x + 20, panel.y + 45, 14, LIGHTGRAY);
-    DrawText("Tempo per mossa:", panel.x + 250, panel.y + 45, 14, LIGHTGRAY);
-    DrawText("Max mosse:", panel.x + 450, panel.y + 45, 14, LIGHTGRAY);
-    
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%d", params_get_int("num_games_per_pair", 20));
-    DrawText(buf, panel.x + 180, panel.y + 45, 14, WHITE);
-    
-    snprintf(buf, sizeof(buf), "%.1fs", params_get_float("time_limit_per_move", 0.2f));
-    DrawText(buf, panel.x + 380, panel.y + 45, 14, WHITE);
-    
-    snprintf(buf, sizeof(buf), "%d", params_get_int("max_moves", 60));
-    DrawText(buf, panel.x + 560, panel.y + 45, 14, WHITE);
-}
-
-//barra progresso partita
-static void draw_progress_bar(int current, int total) {
-    Rectangle bar_bg = {50, 220, 700, 30};
-    DrawRectangleRec(bar_bg, (Color){50, 50, 70, 255});
-    DrawRectangleLinesEx(bar_bg, 2, WHITE);
-    
-    if (total > 0) {
-        float pct = (float)current / total;
-        Rectangle bar_fill = {52, 222, (bar_bg.width - 4) * pct, bar_bg.height - 4};
-        DrawRectangleRec(bar_fill, (Color){0, 180, 100, 255});
-    }
-    
-    char msg[64];
-    snprintf(msg, sizeof(msg), "Match %d / %d", current, total);
-    DrawText(msg, bar_bg.x + 300, bar_bg.y + 8, 16, WHITE);
-}
-
-//risultati partite
-static void draw_standings(TournamentResult* results, int count) {
-    Rectangle table = {50, 270, 700, 350};
-    DrawRectangleRec(table, (Color){35, 35, 50, 255});
-    DrawRectangleLinesEx(table, 2, (Color){150, 150, 200, 255});
-    
-    // Header tabella
-    DrawRectangle(52, 272, 696, 28, (Color){50, 50, 70, 255});
-    DrawText("POS", 60, 278, 14, WHITE);
-    DrawText("IA", 110, 278, 14, WHITE);
-    DrawText("VITTORIE", 350, 278, 14, WHITE);
-    DrawText("PATTE", 450, 278, 14, WHITE);
-    DrawText("SCONFITTE", 530, 278, 14, WHITE);
-    DrawText("WIN RATE", 650, 278, 14, WHITE);
-    
-    // Righe classifica
-    if (results && count > 0) {
-        // Ordina per vittorie (bubble sort semplice)
-        for (int i = 0; i < count - 1; i++) {
-            for (int j = 0; j < count - i - 1; j++) {
-                if (results[j].wins < results[j+1].wins) {
-                    TournamentResult tmp = results[j];
-                    results[j] = results[j+1];
-                    results[j+1] = tmp;
-                }
-            }
-        }
-        
-        for (int i = 0; i < count && i < 10; i++) {
-            int y = 305 + i * 30;
-            Color row_color = (i % 2 == 0) ? (Color){45, 45, 65, 200} : (Color){40, 40, 60, 200};
-            DrawRectangle(52, y, 696, 28, row_color);
-            
-            char buf[32];
-            
-            // Posizione
-            snprintf(buf, sizeof(buf), "#%d", i + 1);
-            DrawText(buf, 60, y + 8, 14, i < 3 ? GOLD : WHITE);
-            
-            // Nome IA
-            DrawText(results[i].engine_name, 110, y + 8, 14, WHITE);
-            
-            // Vittorie
-            snprintf(buf, sizeof(buf), "%d", results[i].wins);
-            DrawText(buf, 360, y + 8, 14, (Color){0, 255, 100, 255});
-            
-            // Patte
-            snprintf(buf, sizeof(buf), "%d", results[i].draws);
-            DrawText(buf, 460, y + 8, 14, LIGHTGRAY);
-            
-            // Sconfitte
-            snprintf(buf, sizeof(buf), "%d", results[i].losses);
-            DrawText(buf, 540, y + 8, 14, (Color){255, 100, 100, 255});
-            
-            // Win rate
-            int total = results[i].wins + results[i].losses + results[i].draws;
-            float rate = total > 0 ? (float)results[i].wins / total * 100 : 0;
-            snprintf(buf, sizeof(buf), "%.1f%%", rate);
-            DrawText(buf, 650, y + 8, 14, rate > 50 ? GOLD : WHITE);
-        }
+// ============================================================================
+// SETUP TABELLONE
+// ============================================================================
+static void setup_bracket(const AIEngineDef** engines) {
+    for (int i = 0; i < 4; i++) {
+        matches[i].id = i;
+        matches[i].round_name = "Quarti";
+        matches[i].p1 = engines[i * 2];
+        matches[i].p2 = engines[i * 2 + 1];
+        matches[i].winner = NULL;
+        matches[i].completed = false;
+        sprintf(matches[i].result_text, "In attesa...");
     }
 }
 
-//PULSANTI
+static void advance_bracket() {
+    // Semifinali (2 match)
+    matches[4].id = 4; matches[4].round_name = "Semifinale 1";
+    matches[4].p1 = matches[0].winner; matches[4].p2 = matches[1].winner;
+    matches[4].winner = NULL; matches[4].completed = false;
+    sprintf(matches[4].result_text, "In attesa...");
 
-static void draw_buttons(bool* start, bool* export_csv) {
-    Rectangle btn_start = {50, 635, 200, 50};
-    Rectangle btn_export = {300, 635, 200, 50};
-    Rectangle btn_exit = {550, 635, 200, 50};
+    matches[5].id = 5; matches[5].round_name = "Semifinale 2";
+    matches[5].p1 = matches[2].winner; matches[5].p2 = matches[3].winner;
+    matches[5].winner = NULL; matches[5].completed = false;
+    sprintf(matches[5].result_text, "In attesa...");
+
+    // Finale e 3° posto (2 match)
+    matches[6].id = 6; matches[6].round_name = "FINALE";
+    matches[6].p1 = matches[4].winner; matches[6].p2 = matches[5].winner;
+    matches[6].winner = NULL; matches[6].completed = false;
+    sprintf(matches[6].result_text, "In attesa...");
+
+    matches[7].id = 7; matches[7].round_name = "Finale 3° Posto";
+    // Loser SF1
+    matches[7].p1 = (matches[4].p1 == matches[4].winner) ? matches[4].p2 : matches[4].p1;
+    // Loser SF2
+    matches[7].p2 = (matches[5].p1 == matches[5].winner) ? matches[5].p2 : matches[5].p1;
+    matches[7].winner = NULL; matches[7].completed = false;
+    sprintf(matches[7].result_text, "In attesa...");
+}
+
+// ============================================================================
+// UI DRAWING
+// ============================================================================
+static void draw_header() {
+    DrawRectangle(0, 0, SCREEN_WIDTH, 60, (Color){25, 25, 40, 255});
+    DrawText("TORNEO DAMA ITALIANA - ELIMINAZIONE DIRETTA", 200, 18, 22, (Color){100, 200, 255, 255});
     
-    // Pulsante START
-    Color start_color = t_state.running ? (Color){80, 80, 80, 200} : (Color){0, 180, 80, 220};
-    DrawRectangleRec(btn_start, start_color);
+    char status[64];
+    if (tournament_finished) sprintf(status, "Completato! Vincitore: %s", matches[6].winner ? matches[6].winner->name : "N/A");
+    else if (tournament_running) sprintf(status, "In corso... Match %d/%d", current_match + 1, MAX_MATCHES);
+    else sprintf(status, "Pronto per l'avvio");
+    DrawText(status, 300, 42, 14, LIGHTGRAY);
+}
+
+static void draw_match(int idx, float x, float y, float w, float h) {
+    TournamentMatch* m = &matches[idx];
+    
+    // Sfondo box
+    Color bg_col = tournament_running && current_match == idx ? 
+                   (Color){50, 60, 80, 255} : (Color){40, 40, 55, 255};
+    DrawRectangle(x, y, w, h, bg_col);
+    DrawRectangleLinesEx((Rectangle){x, y, w, h}, 1, (Color){100, 100, 120, 255});
+    
+    // Titolo round (più piccolo)
+    DrawText(m->round_name, x + 8, y + 4, 10, (Color){150, 150, 180, 255});
+    
+    // Player 1 (sinistra, in alto)
+    const char* name1 = m->p1 ? m->p1->name : "TBD";
+    Color c1 = (m->winner == m->p1) ? GOLD : WHITE;
+    DrawText(name1, x + 10, y + 20, 11, c1);
+    
+    // Player 2 (sinistra, in basso)
+    const char* name2 = m->p2 ? m->p2->name : "TBD";
+    Color c2 = (m->winner == m->p2) ? GOLD : WHITE;
+    DrawText(name2, x + 10, y + 38, 11, c2);
+    
+    // VS (centro, piccolo)
+    DrawText("VS", x + w/2 - 8, y + 28, 9, DARKGRAY);
+    
+    // Risultato (destra)
+    DrawText(m->result_text, x + w - 110, y + 28, 9, LIGHTGRAY);
+}
+
+static void draw_bracket_ui() {
+    // Quarti (sinistra)
+    draw_match(0, 50, 100, 200, 70);
+    draw_match(1, 50, 190, 200, 70);
+    draw_match(2, 50, 300, 200, 70);
+    draw_match(3, 50, 390, 200, 70);
+    
+    // Semifinali (centro)
+    draw_match(4, 300, 145, 200, 70);
+    draw_match(5, 300, 345, 200, 70);
+    
+    // Finali (destra)
+    draw_match(6, 550, 145, 250, 70);
+    draw_match(7, 550, 345, 250, 70);
+    
+    // Linee di connessione (semplificate)
+    Color line_col = (Color){100, 100, 120, 150};
+    // QF1+QF2 -> SF1
+    DrawLine(250, 135, 300, 180, line_col); DrawLine(250, 225, 300, 180, line_col);
+    // QF3+QF4 -> SF2
+    DrawLine(250, 335, 300, 380, line_col); DrawLine(250, 425, 300, 380, line_col);
+    // SF1+SF2 -> Final
+    DrawLine(500, 180, 550, 180, line_col); DrawLine(500, 380, 550, 180, line_col);
+}
+
+static void draw_buttons(bool* start, bool* exit) {
+    Rectangle btn_start = {350, 550, 200, 50};
+    Rectangle btn_exit = {350, 620, 200, 50};
+    
+    Color col_start = tournament_running ? (Color){80, 80, 80, 200} : (Color){0, 180, 80, 220};
+    DrawRectangleRec(btn_start, col_start);
     DrawRectangleLinesEx(btn_start, 2, WHITE);
-    DrawText(t_state.running ? "IN CORSO..." : "AVVIA TORNEO", btn_start.x + 35, btn_start.y + 16, 18, WHITE);
+    DrawText(tournament_running ? "IN CORSO..." : "AVVIA TORNEO", btn_start.x + 35, btn_start.y + 16, 18, WHITE);
     
-    // Pulsante EXPORT
-    DrawRectangleRec(btn_export, t_state.finished ? (Color){0, 150, 200, 220} : (Color){80, 80, 80, 200});
-    DrawRectangleLinesEx(btn_export, 2, WHITE);
-    DrawText("ESPORTA CSV", btn_export.x + 45, btn_export.y + 16, 18, t_state.finished ? WHITE : LIGHTGRAY);
-    
-    // Pulsante EXIT
     DrawRectangleRec(btn_exit, (Color){180, 50, 50, 220});
     DrawRectangleLinesEx(btn_exit, 2, WHITE);
     DrawText("TORNA AL GIOCO", btn_exit.x + 30, btn_exit.y + 16, 18, WHITE);
     
-    // Gestione click
-    if (!t_state.running && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && 
-        CheckCollisionPointRec(GetMousePosition(), btn_start)) {
+    if (!tournament_running && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(GetMousePosition(), btn_start)) {
         *start = true;
     }
-    
-    if (t_state.finished && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && 
-        CheckCollisionPointRec(GetMousePosition(), btn_export)) {
-        *export_csv = true;
-    }
-    
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && 
-        CheckCollisionPointRec(GetMousePosition(), btn_exit)) {
-        // Torna al gioco principale
-        #ifdef _WIN32
-            system("start dama.exe");
-        #else
-            system("./dama.exe &");
-        #endif
-        exit(0);
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(GetMousePosition(), btn_exit)) {
+        *exit = true;
     }
 }
 
-//apertura seconda scena
+// ============================================================================
+// MAIN
+// ============================================================================
 int main(void) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dama Tournament System");
     SetTargetFPS(60);
     
-    // Carica parametri
     params_load("config.cfg");
-    
-    // Registra tutte le IA
     register_all_variants();
     
-    printf("=== TORNEO IA ===\n");
-    printf("IA registrate: %d\n", ai_count());
-    
-    // Inizializza stato torneo
-    t_state.results = calloc(ai_count(), sizeof(TournamentResult));
-    t_state.num_results = ai_count();
-    
-    // Inizializza nomi
-    const AIEngineDef** all = ai_list_all();
-    for (int i = 0; i < ai_count(); i++) {
-        t_state.results[i].engine_name = all[i]->name;
-        t_state.results[i].wins = 0;
-        t_state.results[i].losses = 0;
-        t_state.results[i].draws = 0;
-        t_state.results[i].avg_time_per_move = 0;
+    if (ai_count() < 8) {
+        printf("Errore: Servono almeno 8 IA per il torneo. Ne trovate %d.\n", ai_count());
+        return 1;
     }
     
-    bool start_tournament = false;
-    bool export_csv = false;
+    const AIEngineDef** all_engines = ai_list_all();
+    setup_bracket(all_engines);
+    
+    bool start_req = false;
+    bool exit_req = false;
     
     while (!WindowShouldClose()) {
-        // Avvio torneo
-        if (start_tournament && !t_state.running) {
-            t_state.running = true;
-            t_state.finished = false;
-            
-            // Esegui torneo
-            int num_games = params_get_int("num_games_per_pair", 10);
-            float time_limit = params_get_float("time_limit_per_move", 0.2f);
-            
-            run_tournament_headless(all, ai_count(), num_games, time_limit, t_state.results);
-            
-            t_state.running = false;
-            t_state.finished = true;
-            strcpy(t_state.status_msg, "Torneo completato!");
+        // Gestione avvio torneo
+        if (start_req && !tournament_running) {
+            tournament_running = true;
+            tournament_finished = false;
         }
         
-        // Export CSV
-        if (export_csv && t_state.finished) {
-            export_tournament_csv(t_state.results, t_state.num_results, "tournament_results.csv");
-            export_csv = false;
-            strcpy(t_state.status_msg, "Risultati esportati in tournament_results.csv");
+        // Esecuzione match step-by-step (NON blocca la UI)
+        if (tournament_running && current_match < MAX_MATCHES) {
+            TournamentMatch* m = &matches[current_match];
+            if (m->p1 && m->p2 && !m->completed) {
+                double res = play_tournament_game(m->p1, m->p2, match_time_limit, max_moves_limit);
+                
+                if (res >= 0.9) { m->winner = m->p1; sprintf(m->result_text, "Vittoria %s", m->p1->name); }
+                else if (res <= 0.1) { m->winner = m->p2; sprintf(m->result_text, "Vittoria %s", m->p2->name); }
+                else { m->winner = m->p1; sprintf(m->result_text, "Patta (Vince %s)", m->p1->name); }
+                
+                m->completed = true;
+                current_match++;
+                
+                // Se finiti i quarti, genera semifinali e finali
+                if (current_match == 4) advance_bracket();
+                if (current_match == MAX_MATCHES) {
+                    tournament_running = false;
+                    tournament_finished = true;
+                }
+            }
         }
         
         // === RENDERING ===
         BeginDrawing();
-        ClearBackground((Color){20, 20, 30, 255});
+        ClearBackground((Color){15, 15, 25, 255});
         
         draw_header();
-        draw_config_panel();
+        draw_bracket_ui();
+        draw_buttons(&start_req, &exit_req);
         
-        if (t_state.running || t_state.finished) {
-            draw_progress_bar(t_state.current_match, t_state.total_matches);
-            draw_standings(t_state.results, t_state.num_results);
+        if (exit_req) {
+            #ifdef _WIN32
+                system("start main.exe");
+            #else
+                system("./main.exe &");
+            #endif
+            exit(0);
         }
-        
-        draw_buttons(&start_tournament, &export_csv);
-        
-        // Status message
-        if (t_state.status_msg[0] != '\0') {
-            DrawText(t_state.status_msg, 50, 630, 14, (Color){100, 255, 100, 255});
-        }
-        
-        DrawText("Premi ESC per chiudere", 600, 665, 12, DARKGRAY);
         
         EndDrawing();
     }
     
-    // Pulizia
-    if (t_state.results) free(t_state.results);
     CloseWindow();
-    
     return 0;
 }
