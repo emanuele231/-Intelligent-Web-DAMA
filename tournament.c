@@ -19,7 +19,12 @@ static void init_tournament_board(int board[8][8]) {
     }
 }
 
-double play_tournament_game(const AIEngineDef* e1, const AIEngineDef* e2, float time_limit, int max_moves) {
+// tournament.c (implementazione)
+double play_tournament_game(const AIEngineDef* e1, const AIEngineDef* e2,
+                            float time_limit, int max_moves,
+                            int* caps1, int* caps2) {
+    *caps1 = 0; *caps2 = 0; // Reset contatori
+    
     int board[8][8];
     init_tournament_board(board);
     
@@ -30,7 +35,7 @@ double play_tournament_game(const AIEngineDef* e1, const AIEngineDef* e2, float 
     AI_Instance* a2 = e2->create(&c2);
     if (!a1 || !a2) { fprintf(stderr, "Errore creazione IA\n"); return 0.5; }
     
-    bool turn = true; // true = e1 (Bianco), false = e2 (Nero)
+    bool turn = true; // true = e1 (Bianco)
     int moves = 0;
     
     while (moves < max_moves) {
@@ -40,16 +45,19 @@ double play_tournament_game(const AIEngineDef* e1, const AIEngineDef* e2, float 
         Move m = turn ? e1->get_move(a1, &bb, time_limit) 
                       : e2->get_move(a2, &bb, time_limit);
         
-        // Mossa invalida -> sconfitta immediata
         if (m.from == 255 || m.to == 255) {
             e1->destroy(a1); e2->destroy(a2);
             return turn ? 0.0 : 1.0;
         }
         
+        // Traccia cattura
+        if (m.capture) {
+            if (turn) (*caps1)++; else (*caps2)++;
+        }
+        
         apply_ai_move(board, m.from/8, m.from%8, m.to/8, m.to%8);
         check_promotion(board, m.to/8, m.to%8);
         
-        // Controllo pedine rimaste
         bool w_has = false, b_has = false;
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
@@ -60,11 +68,9 @@ double play_tournament_game(const AIEngineDef* e1, const AIEngineDef* e2, float 
         if (!w_has) { e1->destroy(a1); e2->destroy(a2); return 0.0; }
         if (!b_has) { e1->destroy(a1); e2->destroy(a2); return 1.0; }
         
-        turn = !turn;
-        moves++;
+        turn = !turn; moves++;
     }
     
-    // Patta per limite mosse
     e1->destroy(a1); e2->destroy(a2);
     return 0.5;
 }

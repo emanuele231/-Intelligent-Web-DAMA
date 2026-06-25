@@ -11,8 +11,8 @@ typedef struct {
     double avg_time_per_move;
 } TournamentResult;
 
-double play_tournament_game(const AIEngineDef* engine_white, 
-                            const AIEngineDef* engine_black, 
+double play_tournament_game(const AIEngineDef* e1, 
+                            const AIEngineDef* e2, 
                             float time_limit, 
-                            int max_moves);
+                            int max_moves, int* captures1, int* captures2);
 #endif // TOURNAMENT_H
