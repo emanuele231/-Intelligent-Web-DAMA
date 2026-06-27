@@ -3,104 +3,92 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+// 1. MOSSA SEMPLICE (Pedina Bianca)
+// Bianco va verso l'ALTO (Righe decrescenti: 7 -> 0)
 bool move(int board[8][8], int fromrow, int fromcol, int torow, int tocol){
-    if(torow < 0 || torow >=8 || tocol < 0 || tocol >= 8){
-        printf("fuori dalla scacchiera");
-        return false;
-    }
+    if(torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
+    if(board[fromrow][fromcol] != 1) return false;  // Solo pedina bianca
+    if(board[torow][tocol] != 0) return false;  // Destinazione deve essere vuota
 
-    if(board[fromrow][fromcol] != 1){
-        printf("non ce una pedina bianca nella cella selezionata");
-        return false;
-    }
-
-    if(board[torow][tocol] != 0){
-        printf("casella di destinazione occupata");
-        return false;
-    }
-
-    int drow = torow - fromrow; //differenza tra casella corrente e di destinazione
+    int drow = torow - fromrow;
     int dcol = tocol - fromcol;
 
-    if(drow != -1){
-        printf("non si può andare verso il basso");
-        return false;
-    }
-
-    if(abs(dcol) != 1){
-        printf("puoi muoverti di 1 e solo in diagonale");
-        return false;
-    }
+    // Pedina bianca va SOLO verso l'ALTO (righe decrescenti)
+    if(drow != -1) return false;
+    if(abs(dcol) != 1) return false;
 
     board[fromrow][fromcol] = 0;
     board[torow][tocol] = 1;
     return true;
 }
-
-bool eat (int board[8][8], int fromrow, int torow, int fromcol, int tocol){
+// 2. CATTURA (Pedina Bianca)
+bool eat(int board[8][8], int fromrow, int torow, int fromcol, int tocol){
     if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
     if (board[torow][tocol] != 0) return false;
     
     int piece = board[fromrow][fromcol];
-    if(piece != 1 && piece != 3) return false;
+    if(piece != 1) return false;  // Solo pedina bianca
 
     int drow = torow - fromrow; 
     int dcol = tocol - fromcol;
+    
     if (abs(drow) != 2 || abs(dcol) != 2) return false;
 
-    if (piece == 1 && drow != 2) return false;
+    if (drow != -2) return false;
 
-
+    // Pedina può mangiare sia avanti (-2) che indietro (+2)
     int midRow = fromrow + drow / 2;
     int midCol = fromcol + dcol / 2;
+
+    // Deve esserci una pedina nera da mangiare
     if (board[midRow][midCol] != 2 && board[midRow][midCol] != 4) return false;
 
-    //cattura
+    // Esegui cattura
     board[fromrow][fromcol] = 0;
     board[midRow][midCol] = 0;
-    board[torow][tocol] = piece;
+    board[torow][tocol] = 1;  // Rimane pedina (non diventa dama durante cattura)
 
     return true;
 }
 
-bool has_any_capture(int board[8][8], int player_color){
-    int king_val = (player_color == 1) ? 3 : 4;
+// 3. VERIFICA SE ESISTE ALMENO UNA CATTURA
+bool has_any_capture(int board[8][8], int player_color) {
     int enemy = (player_color == 1) ? 2 : 1;
     int enemy_k = (player_color == 1) ? 4 : 3;
+    int king_val = (player_color == 1) ? 3 : 4;
 
-    for (int r = 0; r < 8; r++){
-        for (int c = 0; c < 8; c++){
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
             int piece = board[r][c];
-            if(piece != player_color && piece != king_val) continue;
+            if (piece != player_color && piece != king_val) continue;
 
+            // 4 direzioni diagonali
             int dr_list[4] = {-2, -2, 2, 2};
             int dc_list[4] = {-2, 2, -2, 2};
 
-            for(int i = 0; i < 4; i++){
+            for (int i = 0; i < 4; i++) {
+                // ✅ REGOLA: Bianco mangia SOLO verso l'ALTO (-2)
+                if (player_color == 1 && dr_list[i] != -2) continue;
+
                 int nr = r + dr_list[i];
                 int nc = c + dc_list[i];
-
                 if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;
                 if (board[nr][nc] != 0) continue;
 
                 int mid_r = r + dr_list[i] / 2;
                 int mid_c = c + dc_list[i] / 2;
-                if(board[mid_r][mid_c] != enemy && board[mid_r][mid_c] != enemy_k) continue;
-
-                if(piece == player_color) {
-                    if(player_color == 1 && dr_list[i] != 2)continue;
-                    if(player_color == 2 && dr_list[i] != -2)continue;
+                if (board[mid_r][mid_c] == enemy || board[mid_r][mid_c] == enemy_k) {
+                    return true; // Trovata almeno una cattura valida
                 }
-                return true;
             }
-
         }
     }
     return false;
 }
 
+// 4. MOSSA DAMA
 bool dama(int board[8][8], int fromrow, int fromcol, int torow, int tocol){
-if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
+    if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
     int piece = board[fromrow][fromcol];
     if (piece != 3 && piece != 4) return false;
 
@@ -109,56 +97,79 @@ if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
     int dRow = torow - fromrow;
     int dCol = tocol - fromcol;
     
+    // Deve muoversi in diagonale di 1 casella
     if (abs(dRow) != abs(dCol) || dRow == 0) return false;
-
     if (abs(dRow) != 1) return false;
 
-    if ((torow + tocol) % 2 == 0) return false;
-
-    board[fromrow][fromcol] = 0;  // Svuota partenza
-    board[torow][tocol] = piece;  // Piazza la Dama a destinazione
+    board[fromrow][fromcol] = 0;
+    board[torow][tocol] = piece;
     return true;
 }
 
+// 5. CATTURA DAMA
+bool dama_eat(int board[8][8], int fromrow, int torow, int fromcol, int tocol){
+    if (torow < 0 || torow >= 8 || tocol < 0 || tocol >= 8) return false;
+    if (board[torow][tocol] != 0) return false;
+    
+    int piece = board[fromrow][fromcol];
+    if(piece != 3 && piece != 4) return false;
+
+    int drow = torow - fromrow; 
+    int dcol = tocol - fromcol;
+    
+    if (abs(drow) != 2 || abs(dcol) != 2) return false;
+
+    int midRow = fromrow + drow / 2;
+    int midCol = fromcol + dcol / 2;
+
+    if (board[midRow][midCol] != 1 && board[midRow][midCol] != 2 && 
+        board[midRow][midCol] != 3 && board[midRow][midCol] != 4) return false;
+
+    board[fromrow][fromcol] = 0;
+    board[midRow][midCol] = 0;
+    board[torow][tocol] = piece;
+
+    return true;
+}
+
+// 6. PROMOZIONE A DAMA
 bool check_promotion(int board[8][8], int row, int col) {
-    printf("cella (%d, %d)\n", row, col);
+    // Bianco diventa Dama a riga 0
     if (board[row][col] == 1 && row == 0) {
-        board[row][col] = 3; // 3 = Dama Bianca
-        printf("Promozione a Dama! (%d, %d)\n", row, col);
+        board[row][col] = 3;
+        printf("Promozione a Dama Bianca! (%d, %d)\n", row, col);
         return true;
     }
-
+    // Nero diventa Dama a riga 7
     if (board[row][col] == 2 && row == 7) {
-        board[row][col] == 4;
-        printf("promozione a Dama [nemico] (%d, %d)\n", row, col);
+        board[row][col] = 4;
+        printf("Promozione a Dama Nera! (%d, %d)\n", row, col);
         return true;
     }
     return false;
 }
 
+// 7. APPLICA MOSSA IA
 void apply_ai_move(int board[8][8], int fromRow, int fromCol, int toRow, int toCol) {
     if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8 ||
-        fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8){
-        printf("Fuori dalla scacchiera\n"); return;
-    }
-
+        fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) return;
 
     int piece = board[fromRow][fromCol];
-    if (piece != 2 && piece != 4) {
-        printf("non è una pedina nera");
-        return;
-    }
+    if (piece != 2 && piece != 4) return;
 
     int dRow = toRow - fromRow;
     int dCol = toCol - fromCol;
 
+    // Gestione cattura
     if (abs(dRow) == 2 && abs(dCol) == 2) {
         int midRow = (fromRow + toRow) / 2;
         int midCol = (fromCol + toCol) / 2;
-        board[midRow][midCol] = 0; // Rimuovi pedina mangiata
-        printf("avversario cattura in (%d, %d)\n", midRow, midCol);
+        board[midRow][midCol] = 0;
     }
 
     board[fromRow][fromCol] = 0;
     board[toRow][toCol] = piece;
+    
+    // Verifica promozione
+    check_promotion(board, toRow, toCol);
 }

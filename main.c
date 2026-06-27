@@ -319,53 +319,78 @@ int main(void) {
             }
 
             // INPUT: Rilascio mouse (esecuzione mossa)
-            if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging) {
-                bool successo = false;
-                int finalRow = -1, finalCol = -1;
+           // INPUT: Rilascio mouse (esecuzione mossa)
+if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging && isPlayerTurn) {
+    bool successo = false;
+    int finalRow = -1, finalCol = -1;
+    int piece = board[dragFromRow][dragFromCol];
 
-                int dr = 1;
-                int dc_opts[2] = {-1, 1};
+    // Verifica se esiste almeno una cattura legale sulla scacchiera
+    bool must_capture = has_any_capture(board, 1);
 
-                for(int i = 0; i < 2; i++) {
-                    int midR = dragFromRow + dr;
-                    int midC = dragFromCol + dc_opts[i];
-                    int landR = dragFromRow + 2 * dr;
-                    int landC = dragFromCol + 2 * dc_opts[i];
+    if (must_capture) {
+        // Se è obbligatorio mangiare, cerca solo mosse di cattura
+        int dr_list[4] = {-2, -2, 2, 2};
+        int dc_list[4] = {-2, 2, -2, 2};
 
-                    if(landR >= 0 && landR < 8 && landC >= 0 && landC < 8) {
-                        if((board[midR][midC] == 2 || board[midR][midC] == 4) && board[landR][landC] == 0) {
-                            board[dragFromRow][dragFromCol] = 0;
-                            board[midR][midC] = 0;
-                            board[landR][landC] = 1;
-                            finalRow = landR; finalCol = landC;
-                            successo = true;
-                            printf("Cattura: nera in (%d,%d) rimossa!\n", midR, midC);
-                            break;
-                        }
-                    }
+        for (int i = 0; i < 4; i++) {
+            // ✅ REGOLA: Pedina bianca mangia SOLO verso l'ALTO
+            if (piece == 1 && dr_list[i] != -2) continue;
+
+            int midR = dragFromRow + dr_list[i] / 2;
+            int midC = dragFromCol + dc_list[i] / 2;
+            int landR = dragFromRow + dr_list[i];
+            int landC = dragFromCol + dc_list[i];
+
+            if (landR >= 0 && landR < 8 && landC >= 0 && landC < 8) {
+                if ((board[midR][midC] == 2 || board[midR][midC] == 4) && board[landR][landC] == 0) {
+                    // Esegui cattura
+                    board[dragFromRow][dragFromCol] = 0;
+                    board[midR][midC] = 0;
+                    board[landR][landC] = piece;
+                    finalRow = landR; 
+                    finalCol = landC;
+                    successo = true;
+                    printf("✅ Cattura eseguita: da (%d,%d) a (%d,%d)\n", dragFromRow, dragFromCol, landR, landC);
+                    break;
                 }
-
-                if(!successo) {
-                    int destRow = hoverRow; int destCol = hoverCol;
-                    if(dragFromRow != destRow || dragFromCol != destCol) {
-                        if(dama(board, dragFromRow, dragFromCol, destRow, destCol)) {
-                            printf("Mossa Dama!\n"); successo = true; finalRow = destRow; finalCol = destCol;
-                        } else if(move(board, dragFromRow, dragFromCol, destRow, destCol)) {
-                            printf("Mossa Pedina!\n"); successo = true; finalRow = destRow; finalCol = destCol;
-                        } else {
-                            printf("Mossa non valida.\n");
-                        }
-                    }
-                }
-
-                if(successo) {
-                    check_promotion(board, finalRow, finalCol);
-                    if (!firstMoveDone) { firstMoveDone = true; showHeader = false; }
-                    isPlayerTurn = false; isIAthinking = true;
-                }
-                isDragging = false; dragFromRow = -1; dragFromCol = -1;
             }
+        }
 
+        if (!successo) {
+            // ✅ Stampa SOLO qui, una volta per click
+            printf("⚠️ Cattura obbligatoria! La pedina selezionata non può mangiare in questa posizione.\n");
+        }
+    } 
+    else {
+        // Nessuna cattura disponibile -> permesso muovere normalmente
+        int destRow = hoverRow;
+        int destCol = hoverCol;
+        
+        if (dragFromRow != destRow || dragFromCol != destCol) {
+            if ((piece == 3 || piece == 4) && dama(board, dragFromRow, dragFromCol, destRow, destCol)) {
+                printf("Mossa Dama!\n"); successo = true; finalRow = destRow; finalCol = destCol;
+            } 
+            else if (piece == 1 && move(board, dragFromRow, dragFromCol, destRow, destCol)) {
+                printf("Mossa Pedina!\n"); successo = true; finalRow = destRow; finalCol = destCol;
+            } 
+            else {
+                printf("Mossa non valida.\n");
+            }
+        }
+    }
+
+    if (successo) {
+        check_promotion(board, finalRow, finalCol);
+        if (!firstMoveDone) { firstMoveDone = true; showHeader = false; }
+        isPlayerTurn = false;
+        isIAthinking = true;
+    }
+    
+    isDragging = false;
+    dragFromRow = -1;
+    dragFromCol = -1;
+}
             // LOGICA IA
             if (!isPlayerTurn && isIAthinking) {
                 static clock_t ai_start = 0;
