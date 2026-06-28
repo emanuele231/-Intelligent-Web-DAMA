@@ -49,27 +49,42 @@ double simulate_rollout(Bitboard *state) {
 }
 
 uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPool *pool) {
-    // 1. Genera catture
-    uint64_t current = bb->black | bb->black_k;
+    // ... (codice esistente per inizializzazione) ...
+    
+    // Determina chi muove
+    uint64_t current = bb->black | bb->black_k;  // IA = Nero
     uint64_t opponent = bb->white | bb->white_k;
     uint64_t occupied = bb->white | bb->black | bb->white_k | bb->black_k;
+    
     uint8_t cap_count = 0;
     
+    // === GENERA CATTURE ===
     for (int bit = 0; bit < 64; bit++) {
         if (!((current >> bit) & 1ULL)) continue;
+        
         int r = bit / 8, c = bit % 8;
         int is_king = (bb->black_k >> bit) & 1ULL;
-        int dr_list[4] = { (is_king || r < 4) ? 2 : 0, (is_king || r < 4) ? -2 : 0, is_king ? 2 : 0, is_king ? -2 : 0 };
-        int dc_list[4] = {-2, 2, 2, -2};
-        int valid_dirs = is_king ? 4 : 2;
+        
+        // Direzioni diagonali
+        int dr_list[4] = {-2, -2, 2, 2};
+        int dc_list[4] = {-2, 2, -2, 2};
+        int valid_dirs = is_king ? 4 : 2;  // Dama: tutte, Pedina: solo avanti
+        
         for (int i = 0; i < valid_dirs; i++) {
             int dr = dr_list[i], dc = dc_list[i];
             if (dr == 0) continue;
+            
+            // ✅ CORREZIONE: Pedina nera cattura SOLO verso il BASSO (+2)
+            if (!is_king && dr != 2) continue;
+            
             int mid_r = r + dr/2, mid_c = c + dc/2;
             int to_r = r + dr, to_c = c + dc;
+            
             if (mid_r < 0 || mid_r >= 8 || mid_c < 0 || mid_c >= 8) continue;
             if (to_r < 0 || to_r >= 8 || to_c < 0 || to_c >= 8) continue;
+            
             int mid_bit = mid_r * 8 + mid_c, to_bit = to_r * 8 + to_c;
+            
             if (((opponent >> mid_bit) & 1ULL) && !((occupied >> to_bit) & 1ULL)) {
                 if (cap_count < MAX_CHILDREN && pool->top < MAX_NODES) {
                     MCTSNode *ch = &pool->nodes[pool->top++];
@@ -83,7 +98,8 @@ uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPool *poo
             }
         }
     }
-    if (cap_count > 0) return cap_count; // Regola italiana: cattura obbligatoria
+    
+    if (cap_count > 0) return cap_count;  // Cattura obbligatoria
 
     // 2. Mosse semplici
     uint8_t count = 0;
