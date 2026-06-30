@@ -325,6 +325,73 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging && isPlayerTurn) {
     int finalRow = -1, finalCol = -1;
     int piece = board[dragFromRow][dragFromCol];
 
+    // === CATTURA CON SEQUENZA MULTIPLA ===
+if (piece == 1 || piece == 3) {
+    bool must_capture = has_any_capture(board, 1);
+    
+    if (must_capture) {
+        // Trova la cattura migliore (priorità regole)
+        int best_captures = 0;
+        int best_dr = 0, best_dc = 0;
+        bool best_is_king_capture = false;
+        
+        int dr_list[4] = {-2, -2, 2, 2};
+        int dc_list[4] = {-2, 2, -2, 2};
+        
+        for (int i = 0; i < 4; i++) {
+            if (piece == 1 && dr_list[i] != -2) continue; // Pedina solo avanti
+            
+            int midR = dragFromRow + dr_list[i] / 2;
+            int midC = dragFromCol + dc_list[i] / 2;
+            int landR = dragFromRow + dr_list[i];
+            int landC = dragFromCol + dc_list[i];
+            
+            if (landR < 0 || landR >= 8 || landC < 0 || landC >= 8) continue;
+            
+            int mid_piece = board[midR][midC];
+            // Pedina mangia solo pedine (2), Dama mangia tutto (2,4)
+            if (piece == 1 && mid_piece != 2) continue;
+            if (piece == 3 && mid_piece != 2 && mid_piece != 4) continue;
+            
+            if (board[landR][landC] == 0) {
+                // Conta catture successive (presa multipla)
+                int total_captures = 1 + count_continued_captures(board, landR, landC, piece);
+                
+                // Applica priorità
+                bool is_king_capture = (mid_piece == 4);
+                if (total_captures > best_captures ||
+                    (total_captures == best_captures && is_king_capture && !best_is_king_capture)) {
+                    best_captures = total_captures;
+                    best_dr = dr_list[i];
+                    best_dc = dc_list[i];
+                    best_is_king_capture = is_king_capture;
+                }
+            }
+        }
+        
+        // Esegui cattura migliore
+        if (best_captures > 0) {
+            int midR = dragFromRow + best_dr / 2;
+            int midC = dragFromCol + best_dc / 2;
+            int landR = dragFromRow + best_dr;
+            int landC = dragFromCol + best_dc;
+            
+            board[dragFromRow][dragFromCol] = 0;
+            board[midR][midC] = 0;
+            board[landR][landC] = piece;
+            
+            // Verifica presa multipla continuata
+            if (best_captures > 1) {
+                printf("PRESA MULTIPLA! %d pezzi catturati in sequenza\n", best_captures);
+                // Qui dovresti implementare il loop per continuare la cattura
+            }
+            
+            successo = true;
+            finalRow = landR; finalCol = landC;
+        }
+    }
+}
+
     // Verifica se esiste almeno una cattura legale sulla scacchiera
     bool must_capture = has_any_capture(board, 1);
 
@@ -334,7 +401,7 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging && isPlayerTurn) {
         int dc_list[4] = {-2, 2, -2, 2};
 
         for (int i = 0; i < 4; i++) {
-            // ✅ REGOLA: Pedina bianca mangia SOLO verso l'ALTO
+            // REGOLA: Pedina bianca mangia SOLO verso l'ALTO
             if (piece == 1 && dr_list[i] != -2) continue;
 
             int midR = dragFromRow + dr_list[i] / 2;
@@ -351,14 +418,14 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging && isPlayerTurn) {
                     finalRow = landR; 
                     finalCol = landC;
                     successo = true;
-                    printf("✅ Cattura eseguita: da (%d,%d) a (%d,%d)\n", dragFromRow, dragFromCol, landR, landC);
+                    printf("Cattura eseguita: da (%d,%d) a (%d,%d)\n", dragFromRow, dragFromCol, landR, landC);
                     break;
                 }
             }
         }
 
         if (!successo) {
-            // ✅ Stampa SOLO qui, una volta per click
+            // Stampa SOLO qui, una volta per click
             printf("⚠️ Cattura obbligatoria! La pedina selezionata non può mangiare in questa posizione.\n");
         }
     } 

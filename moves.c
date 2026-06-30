@@ -41,7 +41,7 @@ bool eat(int board[8][8], int fromrow, int torow, int fromcol, int tocol){
     int midCol = fromcol + dcol / 2;
 
     // Deve esserci una pedina nera da mangiare
-    if (board[midRow][midCol] != 2 && board[midRow][midCol] != 4) return false;
+    if (board[midRow][midCol] != 2) return false;
 
     // Esegui cattura
     board[fromrow][fromcol] = 0;
@@ -49,6 +49,33 @@ bool eat(int board[8][8], int fromrow, int torow, int fromcol, int tocol){
     board[torow][tocol] = 1;  // Rimane pedina (non diventa dama durante cattura)
 
     return true;
+}
+
+int count_continued_captures(int board[8][8], int row, int col, int piece) {
+    int max_additional = 0;
+    int dr_list[4] = {-2, -2, 2, 2};
+    int dc_list[4] = {-2, 2, -2, 2};
+    
+    for (int i = 0; i < 4; i++) {
+        if (piece == 1 && dr_list[i] != -2) continue; // Pedina solo avanti
+        
+        int midR = row + dr_list[i] / 2;
+        int midC = col + dc_list[i] / 2;
+        int landR = row + dr_list[i];
+        int landC = col + dc_list[i];
+        
+        if (landR < 0 || landR >= 8 || landC < 0 || landC >= 8) continue;
+        
+        int mid_piece = board[midR][midC];
+        if (piece == 1 && mid_piece != 2) continue;
+        if (piece == 3 && mid_piece != 2 && mid_piece != 4) continue;
+        
+        if (board[landR][landC] == 0) {
+            int additional = 1 + count_continued_captures(board, landR, landC, piece);
+            if (additional > max_additional) max_additional = additional;
+        }
+    }
+    return max_additional;
 }
 
 // 3. VERIFICA SE ESISTE ALMENO UNA CATTURA

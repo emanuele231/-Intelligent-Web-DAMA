@@ -255,58 +255,59 @@ int main(void) {
             memset(engine_wins, 0, sizeof(engine_wins));
         }
 
-        if (tournament_running && current_match < MAX_MATCHES) {
-            TournamentMatch* m = &matches[current_match];
 
-            if (!m->p1 || !m->p2) {
-                current_match++;
-            }
-            else if (!m->completed) {
-                int caps1 = 0, caps2 = 0;
-                double res = play_tournament_game(m->p1, m->p2, match_time_limit, max_moves_limit, &caps1, &caps2);
-
-                if (res >= 0.9) { m->winner = m->p1; sprintf(m->result_text, "Vittoria %s", m->p1->name); }
-                else if (res <= 0.1) { m->winner = m->p2; sprintf(m->result_text, "Vittoria %s", m->p2->name); }
-                else { m->winner = m->p1; sprintf(m->result_text, "Patta (Vince %s)", m->p1->name); }
-
-                // Trova indici delle IA per aggiornare statistiche
-                int idx1 = -1, idx2 = -1;
-                for (int i = 0; i < 8; i++) {
-                    if (all_engines[i] == m->p1) idx1 = i;
-                    if (all_engines[i] == m->p2) idx2 = i;
-                }
-                if (idx1 != -1) { engine_captures[idx1] += caps1; if (res >= 0.9) engine_wins[idx1]++; }
-                if (idx2 != -1) { engine_captures[idx2] += caps2; if (res <= 0.1) engine_wins[idx2]++; }
-
-                m->completed = true;
-                current_match++;
-
-                if (current_match == 4) {
-                    matches[4].round_name = "Semifinale 1";
-                    matches[4].p1 = matches[0].winner;
-                    matches[4].p2 = matches[1].winner;
-
-                    matches[5].round_name = "Semifinale 2";
-                    matches[5].p1 = matches[2].winner;
-                    matches[5].p2 = matches[3].winner;
-                }
-
-                if (current_match == 6) {
-                    matches[6].round_name = "FINALE";
-                    matches[6].p1 = matches[4].winner;
-                    matches[6].p2 = matches[5].winner;
-
-                    matches[7].round_name = "Finale 3° Posto";
-                    matches[7].p1 = (matches[4].winner == matches[4].p1) ? matches[4].p2 : matches[4].p1;
-                    matches[7].p2 = (matches[5].winner == matches[5].p1) ? matches[5].p2 : matches[5].p1;
-                }
-
-                if (current_match == MAX_MATCHES) {
-                    tournament_running = false;
-                    tournament_finished = true;
-                }
-            }
+if (tournament_running && current_match < MAX_MATCHES) {
+    TournamentMatch* m = &matches[current_match];
+    
+    if (!m->p1 || !m->p2) {
+        current_match++;
+    }
+    else if (!m->completed) {
+        int c1 = 0, c2 = 0;
+        double res = play_tournament_game(m->p1, m->p2, match_time_limit, max_moves_limit, &c1, &c2);
+        
+        // Assegna vincitore
+        if (res >= 0.9) { m->winner = m->p1; sprintf(m->result_text, "Vittoria %s", m->p1->name); }
+        else if (res <= 0.1) { m->winner = m->p2; sprintf(m->result_text, "Vittoria %s", m->p2->name); }
+        else { m->winner = m->p1; sprintf(m->result_text, "Patta (Vince %s)", m->p1->name); }
+        
+        const AIEngineDef** all = ai_list_all();
+        int idx1 = -1, idx2 = -1;
+        for (int i = 0; i < ai_count(); i++) {
+            if (all[i] == m->p1) idx1 = i;
+            if (all[i] == m->p2) idx2 = i;
         }
+        
+        if (idx1 != -1) engine_captures[idx1] += c1;
+        if (idx2 != -1) engine_captures[idx2] += c2;
+        
+        printf("📊 Match %d: %s(%d) vs %s(%d) | Ris: %.1f | Catture: %d-%d | Totali: %d-%d\n",
+               current_match+1, m->p1->name, c1, m->p2->name, c2, res,
+               c1, c2, engine_captures[idx1], engine_captures[idx2]);
+        
+        m->completed = true;
+        current_match++;
+        
+        // Generazione dinamica tabellone (già corretta in precedenza)
+        if (current_match == 4) {
+            matches[4].round_name = "Semifinale 1";
+            matches[4].p1 = matches[0].winner; matches[4].p2 = matches[1].winner;
+            matches[5].round_name = "Semifinale 2";
+            matches[5].p1 = matches[2].winner; matches[5].p2 = matches[3].winner;
+        }
+        if (current_match == 6) {
+            matches[6].round_name = "FINALE";
+            matches[6].p1 = matches[4].winner; matches[6].p2 = matches[5].winner;
+            matches[7].round_name = "Finale 3° Posto";
+            matches[7].p1 = (matches[4].winner == matches[4].p1) ? matches[4].p2 : matches[4].p1;
+            matches[7].p2 = (matches[5].winner == matches[5].p1) ? matches[5].p2 : matches[5].p1;
+        }
+        if (current_match == MAX_MATCHES) {
+            tournament_running = false;
+            tournament_finished = true;
+        }
+    }
+}
 
         BeginDrawing();
         ClearBackground((Color){15, 15, 25, 255});
