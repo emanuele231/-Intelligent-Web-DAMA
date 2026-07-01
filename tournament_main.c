@@ -74,14 +74,15 @@ static void setup_bracket(const AIEngineDef** engines) {
 static void draw_header() {
     DrawRectangle(0, 0, SCREEN_WIDTH, 60, (Color){25, 25, 40, 255});
     DrawText("TORNEO DAMA ITALIANA - ELIMINAZIONE DIRETTA", 200, 18, 22, (Color){100, 200, 255, 255});
-
+    
     char status[128];
     if (tournament_finished) {
         sprintf(status, "Completato! Vincitore: %s", matches[6].winner ? matches[6].winner->name : "N/A");
     }
     else if (tournament_running) {
-        int display_match = (current_match < MAX_MATCHES) ? current_match + 1 : MAX_MATCHES;
-        sprintf(status, "In corso... Match %d/%d", display_match, MAX_MATCHES);
+        // ✅ Mostra sempre il match CORRENTE (1-based)
+        int display = (current_match < MAX_MATCHES) ? current_match + 1 : MAX_MATCHES;
+        sprintf(status, "In corso... Match %d/%d", display, MAX_MATCHES);
     }
     else {
         sprintf(status, "Pronto per l'avvio - 8 IA in gara");
@@ -130,49 +131,51 @@ static void draw_bracket_ui() {
 }
 
 static void draw_report() {
+    // Ordina indici per punti decrescenti
     int sorted[8];
     for (int i = 0; i < 8; i++) sorted[i] = i;
-
     for (int i = 0; i < 7; i++) {
         for (int j = 0; j < 7 - i; j++) {
             if (engine_captures[sorted[j]] < engine_captures[sorted[j + 1]]) {
-                int tmp = sorted[j];
-                sorted[j] = sorted[j + 1];
-                sorted[j + 1] = tmp;
+                int tmp = sorted[j]; sorted[j] = sorted[j + 1]; sorted[j + 1] = tmp;
             }
         }
     }
 
-    float x = 100, y = 100, w = 700, h = 500;
-    DrawRectangle(x, y, w, h, (Color){25, 25, 40, 255});
-    DrawRectangleLinesEx((Rectangle){x, y, w, h}, 2, (Color){100, 200, 255, 255});
-    DrawText("CLASSIFICA TORNEO - PUNTI CAPTURE", 230, y + 15, 20, GOLD);
+    float x = 100, y = 100, w = 700, h = 520;
+    DrawRectangle(x, y, w, h, (Color){20, 20, 35, 255});
+    DrawRectangleLinesEx((Rectangle){x, y, w, h}, 2, (Color){0, 180, 255, 255});
+    DrawText("CLASSIFICA TORNEO - PUNTI CAPTURE", 220, y + 15, 20, GOLD);
 
-    DrawLine(x + 20, y + 45, x + w - 20, y + 45, (Color){150, 150, 150, 100});
-    DrawText("POS", x + 25, y + 30, 14, WHITE);
-    DrawText("IA", x + 70, y + 30, 14, WHITE);
-    DrawText("VITTORIE", x + 320, y + 30, 14, WHITE);
-    DrawText("CATTURE", x + 480, y + 30, 14, WHITE);
-    DrawText("PUNTI", x + 620, y + 30, 14, WHITE);
+    // Header
+    DrawLine(x + 20, y + 50, x + w - 20, y + 50, (Color){100, 100, 120, 100});
+    DrawText("POS", x + 30, y + 35, 14, WHITE);
+    DrawText("IA", x + 80, y + 35, 14, WHITE);
+    DrawText("VITTORIE", x + 300, y + 35, 14, WHITE);
+    DrawText("CATTURE", x + 450, y + 35, 14, WHITE);
+    DrawText("PUNTI", x + 600, y + 35, 14, WHITE);
 
+    // Righe
+    const AIEngineDef** all = ai_list_all();
     for (int i = 0; i < 8; i++) {
         int idx = sorted[i];
-        float row_y = y + 65 + i * 45;
-
+        float row_y = y + 70 + i * 45;
+        
         char pos[6]; sprintf(pos, "#%d", i + 1);
-        DrawText(pos, x + 30, row_y, 16, i < 3 ? GOLD : WHITE);
-
-        DrawText(ai_list_all()[idx]->name, x + 70, row_y, 16, WHITE);
-
-        char win_str[8]; sprintf(win_str, "%d", engine_wins[idx]);
-        DrawText(win_str, x + 330, row_y, 16, LIGHTGRAY);
-
-        char cap_str[12]; sprintf(cap_str, "%d", engine_captures[idx]);
-        DrawText(cap_str, x + 490, row_y, 16, (Color){0, 255, 100, 255});
-
-        DrawText(cap_str, x + 630, row_y, 18, GOLD);
-
-        DrawLine(x + 20, row_y + 35, x + w - 20, row_y + 35, (Color){80, 80, 100, 80});
+        DrawText(pos, x + 35, row_y, 16, i < 3 ? GOLD : WHITE);
+        
+        DrawText(all[idx]->name, x + 80, row_y, 16, WHITE);
+        
+        char v_str[8]; sprintf(v_str, "%d", engine_wins[idx]);
+        DrawText(v_str, x + 310, row_y, 16, LIGHTGRAY);
+        
+        char c_str[12]; sprintf(c_str, "%d", engine_captures[idx]);
+        DrawText(c_str, x + 460, row_y, 16, (Color){0, 255, 100, 255});
+        
+        // Punti = Catture totali
+        DrawText(c_str, x + 610, row_y, 18, GOLD);
+        
+        DrawLine(x + 20, row_y + 35, x + w - 20, row_y + 35, (Color){60, 60, 80, 80});
     }
 }
 
@@ -266,41 +269,51 @@ if (tournament_running && current_match < MAX_MATCHES) {
         int c1 = 0, c2 = 0;
         double res = play_tournament_game(m->p1, m->p2, match_time_limit, max_moves_limit, &c1, &c2);
         
-        // Assegna vincitore
-        if (res >= 0.9) { m->winner = m->p1; sprintf(m->result_text, "Vittoria %s", m->p1->name); }
-        else if (res <= 0.1) { m->winner = m->p2; sprintf(m->result_text, "Vittoria %s", m->p2->name); }
-        else { m->winner = m->p1; sprintf(m->result_text, "Patta (Vince %s)", m->p1->name); }
-        
+        // Trova indici globali
         const AIEngineDef** all = ai_list_all();
         int idx1 = -1, idx2 = -1;
         for (int i = 0; i < ai_count(); i++) {
             if (all[i] == m->p1) idx1 = i;
             if (all[i] == m->p2) idx2 = i;
         }
+
+        // Assegna vincitore e aggiorna vittorie
+        if (res >= 0.9) { 
+            m->winner = m->p1; 
+            if(idx1 != -1) engine_wins[idx1]++;
+            sprintf(m->result_text, "Vittoria %s", m->p1->name); 
+        }
+        else if (res <= 0.1) { 
+            m->winner = m->p2; 
+            if(idx2 != -1) engine_wins[idx2]++;
+            sprintf(m->result_text, "Vittoria %s", m->p2->name); 
+        }
+        else { 
+            m->winner = m->p1; 
+            if(idx1 != -1) engine_wins[idx1]++;
+            sprintf(m->result_text, "Patta (Vince %s)", m->p1->name); 
+        }
         
+        // Accumula catture (1 cattura = 1 punto)
         if (idx1 != -1) engine_captures[idx1] += c1;
         if (idx2 != -1) engine_captures[idx2] += c2;
         
-        printf("📊 Match %d: %s(%d) vs %s(%d) | Ris: %.1f | Catture: %d-%d | Totali: %d-%d\n",
-               current_match+1, m->p1->name, c1, m->p2->name, c2, res,
-               c1, c2, engine_captures[idx1], engine_captures[idx2]);
-        
+        printf(" Match %d: %s(+%d pt) vs %s(+%d pt) | Ris: %.1f\n",
+               current_match+1, m->p1->name, c1, m->p2->name, c2, res);
+
         m->completed = true;
         current_match++;
-        
-        // Generazione dinamica tabellone (già corretta in precedenza)
+
+        // Generazione dinamica fasi successive (identica a prima)
         if (current_match == 4) {
-            matches[4].round_name = "Semifinale 1";
-            matches[4].p1 = matches[0].winner; matches[4].p2 = matches[1].winner;
-            matches[5].round_name = "Semifinale 2";
-            matches[5].p1 = matches[2].winner; matches[5].p2 = matches[3].winner;
+            matches[4].p1 = matches[0].winner; matches[4].p2 = matches[1].winner; matches[4].round_name = "Semifinale 1";
+            matches[5].p1 = matches[2].winner; matches[5].p2 = matches[3].winner; matches[5].round_name = "Semifinale 2";
         }
         if (current_match == 6) {
-            matches[6].round_name = "FINALE";
-            matches[6].p1 = matches[4].winner; matches[6].p2 = matches[5].winner;
-            matches[7].round_name = "Finale 3° Posto";
+            matches[6].p1 = matches[4].winner; matches[6].p2 = matches[5].winner; matches[6].round_name = "FINALE";
             matches[7].p1 = (matches[4].winner == matches[4].p1) ? matches[4].p2 : matches[4].p1;
             matches[7].p2 = (matches[5].winner == matches[5].p1) ? matches[5].p2 : matches[5].p1;
+            matches[7].round_name = "Finale 3° Posto";
         }
         if (current_match == MAX_MATCHES) {
             tournament_running = false;

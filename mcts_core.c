@@ -1,6 +1,7 @@
 #include "mcts_core.h"
 #include <stdlib.h>   // malloc, free
 #include <string.h>   // memset
+#include <stdio.h>
 #include <math.h>     // sqrt, log, logf
 #include <float.h>    // DBL_MAX
 #include <time.h>     // clock_t, CLOCKS_PER_SEC
@@ -49,84 +50,109 @@ double simulate_rollout(Bitboard *state) {
 }
 
 uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPool *pool) {
-    // ... (codice esistente per inizializzazione) ...
-    
-    // Determina chi muove
-    uint64_t current = bb->black | bb->black_k;  // IA = Nero
-    uint64_t opponent = bb->white | bb->white_k;
-    uint64_t occupied = bb->white | bb->black | bb->white_k | bb->black_k;
-    
     uint8_t cap_count = 0;
-    
-    // === GENERA CATTURE ===
+    uint8_t move_count = 0;
+
+    uint64_t my_pieces = bb->black | bb->black_k;
+    uint64_t opp_pieces = bb->white | bb->white_k;
+    uint64_t occupied = bb->white | bb->black | bb->white_k | bb->black_k;
+
+    printf("🔍 IA NERA genera mosse. Pezzi neri: %lld, Pezzi bianchi: %lld\n", 
+           my_pieces, opp_pieces);
+
+    // ==========================================
+    // FASE 1: CERCA CATTURE (OBBLIGATORIE)
+    // ==========================================
     for (int bit = 0; bit < 64; bit++) {
-        if (!((current >> bit) & 1ULL)) continue;
-        
+        if (!((my_pieces >> bit) & 1ULL)) continue;
+
         int r = bit / 8, c = bit % 8;
         int is_king = (bb->black_k >> bit) & 1ULL;
-        
-        // Direzioni diagonali
-        int dr_list[4] = {-2, -2, 2, 2};
-        int dc_list[4] = {-2, 2, -2, 2};
-        int valid_dirs = is_king ? 4 : 2;  // Dama: tutte, Pedina: solo avanti
-        
-        for (int i = 0; i < valid_dirs; i++) {
-            int dr = dr_list[i], dc = dc_list[i];
-            if (dr == 0) continue;
-            
-            // ✅ CORREZIONE: Pedina nera cattura SOLO verso il BASSO (+2)
-            if (!is_king && dr != 2) continue;
-            
-            int mid_r = r + dr/2, mid_c = c + dc/2;
-            int to_r = r + dr, to_c = c + dc;
-            
-            if (mid_r < 0 || mid_r >= 8 || mid_c < 0 || mid_c >= 8) continue;
-            if (to_r < 0 || to_r >= 8 || to_c < 0 || to_c >= 8) continue;
-            
-            int mid_bit = mid_r * 8 + mid_c, to_bit = to_r * 8 + to_c;
-            
-            if (((opponent >> mid_bit) & 1ULL) && !((occupied >> to_bit) & 1ULL)) {
-                if (cap_count < MAX_CHILDREN && pool->top < MAX_NODES) {
-                    MCTSNode *ch = &pool->nodes[pool->top++];
-                    memset(ch, 0, sizeof(MCTSNode));
-                    ch->state = bb;
-                    ch->move.from = (uint8_t)bit;
-                    ch->move.to = (uint8_t)to_bit;
-                    ch->move.capture = 1;
-                    children[cap_count++] = ch;
-                }
-            }
-        }
-    }
-    
-    if (cap_count > 0) return cap_count;  // Cattura obbligatoria
 
-    // 2. Mosse semplici
-    uint8_t count = 0;
-    for (int bit = 0; bit < 64; bit++) {
-        if (!((current >> bit) & 1ULL)) continue;
-        int r = bit / 8, c = bit % 8;
-        int dr = (r < 4) ? 1 : -1;
-        int dc[2] = {-1, 1};
-        for (int i = 0; i < 2; i++) {
-            int nr = r + dr, nc = c + dc[i];
-            if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;
-            if ((nr + nc) % 2 == 0) continue;
-            int nbit = nr * 8 + nc;
-            if ((occupied >> nbit) & 1ULL) continue;
-            if (count < MAX_CHILDREN && pool->top < MAX_NODES) {
+        // 4 direzioni diagonali
+        int dr[4] = {-2, -2, 2, 2};
+        int dc[4] = {-2, 2, -2, 2};
+
+        for (int i = 0; i < 4; i++) {
+            // Pedina nera: solo avanti (+2), Dama: tutte le direzioni
+            if (!is_king && dr[i] != 2) continue;
+
+            int mid_r = r + dr[i] / 2;
+            int mid_c = c + dc[i] / 2;
+            int to_r = r + dr[i];
+            int to_c = c + dc[i];
+
+            if (to_r < 0 || to_r >= 8 || to_c < 0 || to_c >= 8) continue;
+
+            int mid_bit = mid_r * 8 + mid_c;
+            int to_bit = to_r * 8 + to_c;
+
+            // Deve esserci un pezzo avversario in mezzo
+            if (!((opp_pieces >> mid_bit) & 1ULL)) continue;
+            // Destinazione deve essere libera
+            if ((occupied >> to_bit) & 1ULL) continue;
+
+            if (cap_count < MAX_CHILDREN && pool->top < MAX_NODES) {
                 MCTSNode *ch = &pool->nodes[pool->top++];
                 memset(ch, 0, sizeof(MCTSNode));
                 ch->state = bb;
                 ch->move.from = (uint8_t)bit;
-                ch->move.to = (uint8_t)nbit;
-                ch->move.capture = 0;
-                children[count++] = ch;
+                ch->move.to = (uint8_t)to_bit;
+                ch->move.capture = 1;
+                children[cap_count++] = ch;
+                printf("   ✅ Cattura trovata: (%d,%d) -> (%d,%d)\n", r, c, to_r, to_c);
             }
         }
     }
-    return count;
+
+    if (cap_count > 0) {
+        printf("🎯 IA NERA: %d CATTURE disponibili (OBBLIGO)\n", cap_count);
+        return cap_count;
+    }
+
+    // ==========================================
+    // FASE 2: MOSSE SEMPLICI (se nessuna cattura)
+    // ==========================================
+    for (int bit = 0; bit < 64; bit++) {
+        if (!((my_pieces >> bit) & 1ULL)) continue;
+
+        int r = bit / 8, c = bit % 8;
+        int is_king = (bb->black_k >> bit) & 1ULL;
+
+        int dr[4] = {-1, -1, 1, 1};
+        int dc[4] = {-1, 1, -1, 1};
+
+        for (int i = 0; i < 4; i++) {
+            if (!is_king && dr[i] != 1) continue; // Nero va solo giù
+
+            int to_r = r + dr[i];
+            int to_c = c + dc[i];
+            if (to_r < 0 || to_r >= 8 || to_c < 0 || to_c >= 8) continue;
+
+            int to_bit = to_r * 8 + to_c;
+            if ((occupied >> to_bit) & 1ULL) continue;
+
+            if (move_count < MAX_CHILDREN && pool->top < MAX_NODES) {
+                MCTSNode *ch = &pool->nodes[pool->top++];
+                memset(ch, 0, sizeof(MCTSNode));
+                ch->state = bb;
+                ch->move.from = (uint8_t)bit;
+                ch->move.to = (uint8_t)to_bit;
+                ch->move.capture = 0;
+                children[move_count++] = ch;
+            }
+        }
+    }
+
+    printf(" IA NERA: %d mosse semplici trovate\n", move_count);
+    
+    if (move_count == 0 && cap_count == 0) {
+        printf(" IA NERA: NESSUNA MOSSA DISPONIBILE! Sconfitta.\n");
+    }
+    
+    return move_count;
 }
+
 static double calculate_score(MCTSNode* node, double parent_visits, const AIConfig* cfg) {
     if (node->visits == 0) return DBL_MAX;
     

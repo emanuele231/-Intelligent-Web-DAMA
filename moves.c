@@ -83,34 +83,39 @@ bool has_any_capture(int board[8][8], int player_color) {
     int enemy = (player_color == 1) ? 2 : 1;
     int enemy_k = (player_color == 1) ? 4 : 3;
     int king_val = (player_color == 1) ? 3 : 4;
+    bool found = false;
 
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
             int piece = board[r][c];
             if (piece != player_color && piece != king_val) continue;
 
-            // 4 direzioni diagonali
             int dr_list[4] = {-2, -2, 2, 2};
             int dc_list[4] = {-2, 2, -2, 2};
 
             for (int i = 0; i < 4; i++) {
-                // ✅ REGOLA: Bianco mangia SOLO verso l'ALTO (-2)
+                // Bianco cattura SOLO verso l'ALTO (-2)
                 if (player_color == 1 && dr_list[i] != -2) continue;
 
                 int nr = r + dr_list[i];
                 int nc = c + dc_list[i];
                 if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;
+                if ((nr + nc) % 2 == 0) continue; // Deve essere casella scura
                 if (board[nr][nc] != 0) continue;
 
                 int mid_r = r + dr_list[i] / 2;
                 int mid_c = c + dc_list[i] / 2;
+                
                 if (board[mid_r][mid_c] == enemy || board[mid_r][mid_c] == enemy_k) {
-                    return true; // Trovata almeno una cattura valida
+                    printf("TROVATA CATTURA DISPONIBILE: Pedina %s in (%d,%d) può mangiare in (%d,%d)\n", 
+                           (player_color == 1 ? "BIANCA" : "NERA"), r, c, nr, nc);
+                    found = true;
                 }
             }
         }
     }
-    return false;
+    if (!found) printf(" NESSUNA CATTURA DISPONIBILE sulla scacchiera.\n");
+    return found;
 }
 
 // 4. MOSSA DAMA
@@ -179,24 +184,35 @@ bool check_promotion(int board[8][8], int row, int col) {
 // 7. APPLICA MOSSA IA
 void apply_ai_move(int board[8][8], int fromRow, int fromCol, int toRow, int toCol) {
     if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8 ||
-        fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) return;
+        fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) {
+        printf("apply_ai_move: Fuori dalla scacchiera\n");
+        return;
+    }
 
     int piece = board[fromRow][fromCol];
-    if (piece != 2 && piece != 4) return;
+    if (piece != 2 && piece != 4) {
+        printf("apply_ai_move: non è una pedina nera (trovato %d)\n", piece);
+        return;
+    }
 
     int dRow = toRow - fromRow;
     int dCol = toCol - fromCol;
 
-    // Gestione cattura
+    // ✅ GESTIONE CATTURA: se la distanza è 2, rimuovi il pezzo in mezzo
     if (abs(dRow) == 2 && abs(dCol) == 2) {
         int midRow = (fromRow + toRow) / 2;
         int midCol = (fromCol + toCol) / 2;
+        
+        int captured_piece = board[midRow][midCol];
+        printf("IA NERA cattura pezzo %d in (%d,%d)\n", captured_piece, midRow, midCol);
+        
+        // ✅ RIMUOVI il pezzo catturato
         board[midRow][midCol] = 0;
     }
 
+    // Sposta il pezzo
     board[fromRow][fromCol] = 0;
     board[toRow][toCol] = piece;
     
-    // Verifica promozione
-    check_promotion(board, toRow, toCol);
+    printf("   IA: (%d,%d) -> (%d,%d)\n", fromRow, fromCol, toRow, toCol);
 }
