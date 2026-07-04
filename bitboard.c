@@ -18,7 +18,7 @@ void board_to_bitboard(int board[8][8], Bitboard *bb) {
             }
         }
     }
-    bb->turn = 1; //tocca al nero
+    //bb->turn = 1; //tocca al nero
 }
 
 void bitboard_to_board(Bitboard *bb, int board[8][8]) {

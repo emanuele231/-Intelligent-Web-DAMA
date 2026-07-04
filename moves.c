@@ -184,35 +184,26 @@ bool check_promotion(int board[8][8], int row, int col) {
 // 7. APPLICA MOSSA IA
 void apply_ai_move(int board[8][8], int fromRow, int fromCol, int toRow, int toCol) {
     if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8 ||
-        fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) {
-        printf("apply_ai_move: Fuori dalla scacchiera\n");
-        return;
-    }
+        fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) return;
 
     int piece = board[fromRow][fromCol];
-    if (piece != 2 && piece != 4) {
-        printf("apply_ai_move: non è una pedina nera (trovato %d)\n", piece);
-        return;
-    }
+    // Accetta qualsiasi pezzo valido (1-4)
+    if (piece < 1 || piece > 4) return;
 
     int dRow = toRow - fromRow;
     int dCol = toCol - fromCol;
 
-    // ✅ GESTIONE CATTURA: se la distanza è 2, rimuovi il pezzo in mezzo
+    // Gestione cattura
     if (abs(dRow) == 2 && abs(dCol) == 2) {
         int midRow = (fromRow + toRow) / 2;
         int midCol = (fromCol + toCol) / 2;
-        
-        int captured_piece = board[midRow][midCol];
-        printf("IA NERA cattura pezzo %d in (%d,%d)\n", captured_piece, midRow, midCol);
-        
-        // ✅ RIMUOVI il pezzo catturato
-        board[midRow][midCol] = 0;
+        board[midRow][midCol] = 0; // Rimuove pezzo catturato
     }
 
-    // Sposta il pezzo
+    // Esegue spostamento
     board[fromRow][fromCol] = 0;
     board[toRow][toCol] = piece;
     
-    printf("   IA: (%d,%d) -> (%d,%d)\n", fromRow, fromCol, toRow, toCol);
+    // Verifica promozione
+    check_promotion(board, toRow, toCol);
 }
