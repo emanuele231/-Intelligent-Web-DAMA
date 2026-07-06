@@ -5,20 +5,22 @@
 static inline int to_bit(int r, int c) { return r * 8 + c; }
 
 void board_to_bitboard(int board[8][8], Bitboard *bb) {
-    bb->white = bb->black = bb->white_k = bb->black_k = 0ULL;
+    bb->white = 0;
+    bb->black = 0;
+    bb->white_k = 0;
+    bb->black_k = 0;
+
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
-            int bit = to_bit(r, c);
-            if ((r + c) % 2 == 0) continue; //salta le caselle chiare
-            switch (board[r][c]) {
-                case 1: bb->white |= (1ULL << bit); break;
-                case 2: bb->black |= (1ULL << bit); break;
-                case 3: bb->white_k |= (1ULL << bit); break;
-                case 4: bb->black_k |= (1ULL << bit); break;
-            }
+            int bit = r * 8 + c;
+            int cell = board[r][c];
+
+            if (cell == 1) bb->white   |= (1ULL << bit);  // Pedina bianca
+            if (cell == 2) bb->black   |= (1ULL << bit);  // Pedina nera
+            if (cell == 3) bb->white_k |= (1ULL << bit);  // Dama bianca
+            if (cell == 4) bb->black_k |= (1ULL << bit);  // Dama nera
         }
     }
-    //bb->turn = 1; //tocca al nero
 }
 
 void bitboard_to_board(Bitboard *bb, int board[8][8]) {

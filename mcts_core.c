@@ -53,43 +53,63 @@ uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPool *poo
     uint8_t cap_count = 0;
     uint8_t move_count = 0;
 
-    // Selezione dinamica in base al turno
     uint64_t my_pieces, my_kings, opp_pieces, opp_kings;
     int dr_move, dr_cap;
 
     if (bb->turn == 1) { // BIANCO
-        my_pieces = bb->white; my_kings = bb->white_k;
-        opp_pieces = bb->black; opp_kings = bb->black_k;
-        dr_move = -1; // Il bianco sale (righe decrescenti)
+        my_pieces = bb->white | bb->white_k;
+        my_kings  = bb->white_k;
+        opp_pieces = bb->black | bb->black_k;
+        opp_kings  = bb->black_k;
+        dr_move = -1;
         dr_cap  = -2;
-    } else {           // NERO
-        my_pieces = bb->black; my_kings = bb->black_k;
-        opp_pieces = bb->white; opp_kings = bb->white_k;
-        dr_move = 1;  // Il nero scende (righe crescenti)
+    } else {             // NERO
+        my_pieces = bb->black | bb->black_k;
+        my_kings  = bb->black_k;
+        opp_pieces = bb->white | bb->white_k;
+        opp_kings  = bb->white_k;
+        dr_move = 1;
         dr_cap  = 2;
     }
 
     uint64_t occupied = bb->white | bb->black | bb->white_k | bb->black_k;
 
-    // 1. CATTURE (OBBLIGATORIE)
+    // ==========================================
+    // FASE 1: CATTURE (OBBLIGATORIE)
+    // ==========================================
     int dr_list[4] = {-2, -2, 2, 2};
     int dc_list[4] = {-2, 2, -2, 2};
+
     for (int bit = 0; bit < 64; bit++) {
         if (!((my_pieces >> bit) & 1ULL)) continue;
+
         int r = bit / 8, c = bit % 8;
         int is_king = (my_kings >> bit) & 1ULL;
 
         for (int i = 0; i < 4; i++) {
-            // Pedina semplice: solo nella direzione di avanzamento
+            // PEDINA: solo direzione di avanzamento
+            // DAMA: tutte le 4 direzioni
             if (!is_king && dr_list[i] != dr_cap) continue;
 
-            int mid_r = r + dr_list[i] / 2, mid_c = c + dc_list[i] / 2;
-            int to_r = r + dr_list[i], to_c = c + dc_list[i];
+            int mid_r = r + dr_list[i] / 2;
+            int mid_c = c + dc_list[i] / 2;
+            int to_r = r + dr_list[i];
+            int to_c = c + dc_list[i];
+
             if (to_r < 0 || to_r >= 8 || to_c < 0 || to_c >= 8) continue;
 
-            int mid_bit = mid_r * 8 + mid_c, to_bit = to_r * 8 + to_c;
-            if (!((opp_pieces >> mid_bit) & 1ULL)) continue; // Deve esserci un avversario
-            if ((occupied >> to_bit) & 1ULL) continue;       // Destinazione libera
+            int mid_bit = mid_r * 8 + mid_c;
+            int to_bit = to_r * 8 + to_c;
+
+            // Deve esserci un avversario in mezzo
+            if (!((opp_pieces >> mid_bit) & 1ULL)) continue;
+            // Destinazione libera
+            if ((occupied >> to_bit) & 1ULL) continue;
+
+            // Pedina semplice non mangia dame
+            if (!is_king) {
+                if ((opp_kings >> mid_bit) & 1ULL) continue;
+            }
 
             if (cap_count < MAX_CHILDREN && pool->top < MAX_NODES) {
                 MCTSNode *ch = &pool->nodes[pool->top++];
@@ -105,19 +125,25 @@ uint8_t generate_legal_moves(Bitboard *bb, MCTSNode *children[], MemoryPool *poo
 
     if (cap_count > 0) return cap_count;
 
-    // 2. MOSSE SEMPLICI
+    // ==========================================
+    // FASE 2: MOSSE SEMPLICI
+    // ==========================================
     int ms_dr[4] = {-1, -1, 1, 1};
     int ms_dc[4] = {-1, 1, -1, 1};
+
     for (int bit = 0; bit < 64; bit++) {
         if (!((my_pieces >> bit) & 1ULL)) continue;
+
         int r = bit / 8, c = bit % 8;
         int is_king = (my_kings >> bit) & 1ULL;
 
         for (int i = 0; i < 4; i++) {
-            // Pedina semplice: solo nella direzione di avanzamento
+            // PEDINA: solo direzione di avanzamento
+            // DAMA: tutte le 4 direzioni
             if (!is_king && ms_dr[i] != dr_move) continue;
 
-            int to_r = r + ms_dr[i], to_c = c + ms_dc[i];
+            int to_r = r + ms_dr[i];
+            int to_c = c + ms_dc[i];
             if (to_r < 0 || to_r >= 8 || to_c < 0 || to_c >= 8) continue;
 
             int to_bit = to_r * 8 + to_c;

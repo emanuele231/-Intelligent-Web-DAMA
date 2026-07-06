@@ -320,76 +320,74 @@ int main(void) {
 
             // INPUT: Rilascio mouse (esecuzione mossa)
            // INPUT: Rilascio mouse (esecuzione mossa)
+// INPUT: Rilascio mouse
+// INPUT: Rilascio mouse per cattura
 if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && isDragging && isPlayerTurn) {
     bool successo = false;
     int finalRow = -1, finalCol = -1;
     int piece = board[dragFromRow][dragFromCol];
-
-    printf("️ RILASCIATO: Pedina %d in (%d,%d) -> Dest: (%d,%d)\n", 
-           piece, dragFromRow, dragFromCol, hoverRow, hoverCol);
-
+    
+    // Verifica se ci sono catture disponibili per il Bianco
     bool must_capture = has_any_capture(board, 1);
-
+    
     if (must_capture) {
-        int dr_list[4] = {-2, -2, 2, 2};
-        int dc_list[4] = {-2, 2, -2, 2};
-        bool found_valid = false;
-
-        for (int i = 0; i < 4; i++) {
-            if (piece == 1 && dr_list[i] != -2) continue; // Bianco solo SU
-
-            int midR = dragFromRow + dr_list[i] / 2;
-            int midC = dragFromCol + dc_list[i] / 2;
-            int landR = dragFromRow + dr_list[i];
-            int landC = dragFromCol + dc_list[i];
-
-            printf("   🔍 Controllo dir %d: mid(%d,%d)=%d, land(%d,%d)=%d\n", 
-                   i, midR, midC, board[midR][midC], landR, landC, board[landR][landC]);
-
-            if (landR < 0 || landR >= 8 || landC < 0 || landC >= 8) { printf("   ❌ Fuori board\n"); continue; }
-            if ((landR + landC) % 2 == 0) { printf("   ❌ Casella chiara (non valida)\n"); continue; }
-            
-            int mid_piece = board[midR][midC];
-            // Pedina mangia SOLO pedine (2). Dama mangia pedine(2) e dame(4)
-            if (piece == 1 && mid_piece != 2) { printf("    Pedina bianca non può mangiare dame\n"); continue; }
-            if (piece == 3 && mid_piece != 2 && mid_piece != 4) { printf("   ❌ Dama non trova pezzo nemico\n"); continue; }
-            if (board[landR][landC] != 0) { printf("   ❌ Destinazione occupata\n"); continue; }
-
-            // ✅ CATTURA VALIDA TROVATA
-            board[dragFromRow][dragFromCol] = 0;
-            board[midR][midC] = 0;
-            board[landR][landC] = piece;
-            finalRow = landR; finalCol = landC;
-            successo = true;
-            found_valid = true;
-            printf("   ✅ CATTURA ESEGUITA! Da (%d,%d) a (%d,%d)\n", dragFromRow, dragFromCol, landR, landC);
-            break;
+        // Cerca la migliore cattura per QUESTO pezzo
+        int dr, dc, land_r, land_c;
+        if (find_best_capture(board, dragFromRow, dragFromCol, &dr, &dc, &land_r, &land_c)) {
+            // Esegui presa multipla obbligatoria
+            int total_captured = 0;
+            if (execute_multi_capture(board, dragFromRow, dragFromCol, &finalRow, &finalCol, &total_captured)) {
+                printf("Presa multipla eseguita! %d pezzi catturati.\n", total_captured);
+                successo = true;
+            }
+        } else {
+            printf("⚠️ CATTURA OBBLIGATORIA! Questa pedina/dama non può catturare da qui.\n");
+            printf("   Trascina un altro pezzo che può mangiare.\n");
         }
-
-        if (!found_valid) {
-            printf("⚠️ CATTURA OBBLIGATORIA! Ma questa pedina non può mangiare in questa posizione. Trascina quella giusta.\n");
-        }
-    } 
-    else {
-        // Mossa semplice... (tieni il tuo codice esistente per le mosse semplici)
-        int destRow = hoverRow; int destCol = hoverCol;
-        if(dragFromRow != destRow || dragFromCol != destCol) {
-            if((piece == 3) && dama(board, dragFromRow, dragFromCol, destRow, destCol)) {
-                printf("Mossa Dama!\n"); successo = true; finalRow = destRow; finalCol = destCol;
-            } else if(piece == 1 && move(board, dragFromRow, dragFromCol, destRow, destCol)) {
-                printf("Mossa Pedina!\n"); successo = true; finalRow = destRow; finalCol = destCol;
-            } else {
-                printf("Mossa non valida.\n");
+    } else {
+        // Nessuna cattura disponibile - permessa mossa semplice
+        int destRow = hoverRow;
+        int destCol = hoverCol;
+        
+        if (dragFromRow != destRow || dragFromCol != destCol) {
+            // Dama (pezzo 3) - può muovere in tutte le direzioni
+            if (piece == 3) {
+                if (abs(destRow - dragFromRow) == 1 && abs(destCol - dragFromCol) == 1) {
+                    if (board[destRow][destCol] == 0) {
+                        board[destRow][destCol] = 3;
+                        board[dragFromRow][dragFromCol] = 0;
+                        successo = true;
+                        finalRow = destRow;
+                        finalCol = destCol;
+                        printf("Mossa Dama!\n");
+                    }
+                }
+            }
+            // Pedina bianca (pezzo 1) - solo avanti
+            else if (piece == 1) {
+                if (move(board, dragFromRow, dragFromCol, destRow, destCol)) {
+                    successo = true;
+                    finalRow = destRow;
+                    finalCol = destCol;
+                    printf("Mossa Pedina!\n");
+                }
             }
         }
     }
-
-    if(successo) {
-        check_promotion(board, finalRow, finalCol);
+    
+    if (successo) {
+        if (finalRow != -1 && finalCol != -1) {
+            check_promotion(board, finalRow, finalCol);
+        }
+        
         if (!firstMoveDone) { firstMoveDone = true; showHeader = false; }
-        isPlayerTurn = false; isIAthinking = true;
+        isPlayerTurn = false;
+        isIAthinking = true;
     }
-    isDragging = false; dragFromRow = -1; dragFromCol = -1;
+    
+    isDragging = false;
+    dragFromRow = -1;
+    dragFromCol = -1;
 }
 
             // LOGICA IA

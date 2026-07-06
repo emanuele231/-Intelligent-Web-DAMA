@@ -3,6 +3,15 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+// Struttura per memorizzare le opzioni di cattura
+typedef struct {
+    int dr, dc;
+    int captured_kings;  // Numero di dame catturate
+    int captured_pawns;  // Numero di pedine catturate
+    int total_captures;  // Totale pezzi catturati
+    int final_row, final_col;
+} CaptureOption;
+
 // 1. MOSSA SEMPLICE (Pedina Bianca)
 // Bianco va verso l'ALTO (Righe decrescenti: 7 -> 0)
 bool move(int board[8][8], int fromrow, int fromcol, int torow, int tocol){
@@ -78,44 +87,47 @@ int count_continued_captures(int board[8][8], int row, int col, int piece) {
     return max_additional;
 }
 
-// 3. VERIFICA SE ESISTE ALMENO UNA CATTURA
 bool has_any_capture(int board[8][8], int player_color) {
+    int king_val = (player_color == 1) ? 3 : 4;
     int enemy = (player_color == 1) ? 2 : 1;
     int enemy_k = (player_color == 1) ? 4 : 3;
-    int king_val = (player_color == 1) ? 3 : 4;
-    bool found = false;
 
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
             int piece = board[r][c];
+            // Controlla sia pedine che dame del giocatore
             if (piece != player_color && piece != king_val) continue;
 
             int dr_list[4] = {-2, -2, 2, 2};
             int dc_list[4] = {-2, 2, -2, 2};
 
             for (int i = 0; i < 4; i++) {
-                // Bianco cattura SOLO verso l'ALTO (-2)
-                if (player_color == 1 && dr_list[i] != -2) continue;
+                // PEDINE: solo avanti, DAME: tutte le direzioni
+                if (piece == 1 && dr_list[i] != -2) continue;  // Pedina bianca solo su
+                if (piece == 2 && dr_list[i] != 2) continue;   // Pedina nera solo giù
+                // Dame (3 e 4) possono catturare in tutte le direzioni - nessun continue
 
                 int nr = r + dr_list[i];
                 int nc = c + dc_list[i];
                 if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;
-                if ((nr + nc) % 2 == 0) continue; // Deve essere casella scura
-                if (board[nr][nc] != 0) continue;
+                if (board[nr][nc] != 0) continue;  // Destinazione deve essere libera
 
                 int mid_r = r + dr_list[i] / 2;
                 int mid_c = c + dc_list[i] / 2;
+                int mid_piece = board[mid_r][mid_c];
                 
-                if (board[mid_r][mid_c] == enemy || board[mid_r][mid_c] == enemy_k) {
-                    printf("TROVATA CATTURA DISPONIBILE: Pedina %s in (%d,%d) può mangiare in (%d,%d)\n", 
-                           (player_color == 1 ? "BIANCA" : "NERA"), r, c, nr, nc);
-                    found = true;
-                }
+                // Pedina bianca mangia solo pedine nere
+                if (piece == 1 && mid_piece != 2) continue;
+                // Pedina nera mangia solo pedine bianche
+                if (piece == 2 && mid_piece != 1) continue;
+                // Dama mangia sia pedine che dame avversarie
+                if ((piece == 3 || piece == 4) && mid_piece != enemy && mid_piece != enemy_k) continue;
+
+                return true;  // Cattura trovata!
             }
         }
     }
-    if (!found) printf(" NESSUNA CATTURA DISPONIBILE sulla scacchiera.\n");
-    return found;
+    return false;
 }
 
 // 4. MOSSA DAMA
@@ -149,7 +161,7 @@ bool dama_eat(int board[8][8], int fromrow, int torow, int fromcol, int tocol){
     int drow = torow - fromrow; 
     int dcol = tocol - fromcol;
     
-    if (abs(drow) != 2 || abs(dcol) != 2) return false;
+    if (abs(drow) != 2 || abs(dcol) != -2) return false;
 
     int midRow = fromrow + drow / 2;
     int midCol = fromcol + dcol / 2;
@@ -164,46 +176,228 @@ bool dama_eat(int board[8][8], int fromrow, int torow, int fromcol, int tocol){
     return true;
 }
 
-// 6. PROMOZIONE A DAMA
-bool check_promotion(int board[8][8], int row, int col) {
-    // Bianco diventa Dama a riga 0
-    if (board[row][col] == 1 && row == 0) {
-        board[row][col] = 3;
-        printf("Promozione a Dama Bianca! (%d, %d)\n", row, col);
-        return true;
-    }
-    // Nero diventa Dama a riga 7
-    if (board[row][col] == 2 && row == 7) {
-        board[row][col] = 4;
-        printf("Promozione a Dama Nera! (%d, %d)\n", row, col);
-        return true;
-    }
-    return false;
-}
-
-// 7. APPLICA MOSSA IA
 void apply_ai_move(int board[8][8], int fromRow, int fromCol, int toRow, int toCol) {
     if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8 ||
         fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8) return;
 
     int piece = board[fromRow][fromCol];
-    // Accetta qualsiasi pezzo valido (1-4)
     if (piece < 1 || piece > 4) return;
 
     int dRow = toRow - fromRow;
     int dCol = toCol - fromCol;
 
-    // Gestione cattura
+    // Cattura: rimuovi pezzo in mezzo
     if (abs(dRow) == 2 && abs(dCol) == 2) {
         int midRow = (fromRow + toRow) / 2;
         int midCol = (fromCol + toCol) / 2;
-        board[midRow][midCol] = 0; // Rimuove pezzo catturato
+        board[midRow][midCol] = 0;
     }
 
-    // Esegue spostamento
+    // Sposta il pezzo
     board[fromRow][fromCol] = 0;
     board[toRow][toCol] = piece;
-    
-    // Verifica promozione
+
+    // Promozione
     check_promotion(board, toRow, toCol);
+}
+
+bool check_promotion(int board[8][8], int row, int col) {
+    // Pedina bianca (1) arriva in riga 0 -> diventa Dama bianca (3)
+    if (board[row][col] == 1 && row == 0) {
+        board[row][col] = 3;
+        printf("   Promozione a Dama Bianca! (%d, %d)\n", row, col);
+        return true;
+    }
+    // Pedina nera (2) arriva in riga 7 -> diventa Dama nera (4)
+    if (board[row][col] == 2 && row == 7) {
+        board[row][col] = 4;
+        printf("   Promozione a Dama Nera! (%d, %d)\n", row, col);
+        return true;
+    }
+    return false;
+}
+
+// Conta catture ricorsivamente per presa multipla
+int count_captures_recursive(int board[8][8], int row, int col, int piece, 
+                             int* kings_captured, int* pawns_captured) {
+    int max_kings = 0, max_pawns = 0;
+    int dr_list[4] = {-2, -2, 2, 2};
+    int dc_list[4] = {-2, 2, -2, 2};
+    int is_king = (piece == 3 || piece == 4);
+    
+    for (int i = 0; i < 4; i++) {
+        // Pedina semplice: solo avanti
+        if (!is_king && piece == 1 && dr_list[i] != -2) continue;
+        if (!is_king && piece == 2 && dr_list[i] != 2) continue;
+        
+        int mid_r = row + dr_list[i] / 2;
+        int mid_c = col + dc_list[i] / 2;
+        int land_r = row + dr_list[i];
+        int land_c = col + dc_list[i];
+        
+        if (land_r < 0 || land_r >= 8 || land_c < 0 || land_c >= 8) continue;
+        
+        int mid_piece = board[mid_r][mid_c];
+        int is_enemy_king = (mid_piece == 3 || mid_piece == 4);
+        int is_enemy_pawn = (mid_piece == 1 || mid_piece == 2);
+        
+        // Pedina mangia solo pedine, Dama mangia tutto
+        if (piece == 1 && !is_enemy_pawn) continue;
+        if (piece == 2 && !is_enemy_pawn) continue;
+        if (!is_enemy_king && !is_enemy_pawn) continue;
+        
+        if (board[land_r][land_c] != 0) continue;
+        
+        // Simula cattura
+        int saved_mid = board[mid_r][mid_c];
+        int saved_land = board[land_r][land_c];
+        int saved_from = board[row][col];
+        
+        board[row][col] = 0;
+        board[mid_r][mid_c] = 0;
+        board[land_r][land_c] = saved_from;
+        
+        // Conta catture successive
+        int next_kings = 0, next_pawns = 0;
+        count_captures_recursive(board, land_r, land_c, saved_from, &next_kings, &next_pawns);
+        
+        int total_kings = (is_enemy_king ? 1 : 0) + next_kings;
+        int total_pawns = (is_enemy_pawn ? 1 : 0) + next_pawns;
+        
+        if (total_kings > max_kings || (total_kings == max_kings && total_pawns > max_pawns)) {
+            max_kings = total_kings;
+            max_pawns = total_pawns;
+        }
+        
+        // Ripristina
+        board[row][col] = saved_from;
+        board[mid_r][mid_c] = saved_mid;
+        board[land_r][land_c] = saved_land;
+    }
+    
+    *kings_captured = max_kings;
+    *pawns_captured = max_pawns;
+    return max_kings + max_pawns;
+}
+
+// Trova la migliore cattura secondo le regole italiane
+bool find_best_capture(int board[8][8], int from_row, int from_col,
+                       int *out_dr, int *out_dc, int *out_land_r, int *out_land_c) {
+    int piece = board[from_row][from_col];
+    CaptureOption best = {0};
+    bool found = false;
+    
+    int dr_list[4] = {-2, -2, 2, 2};
+    int dc_list[4] = {-2, 2, -2, 2};
+    int is_king = (piece == 3 || piece == 4);
+    
+    for (int i = 0; i < 4; i++) {
+        // PEDINE: solo avanti, DAME: tutte le direzioni
+        if (!is_king && piece == 1 && dr_list[i] != -2) continue;
+        if (!is_king && piece == 2 && dr_list[i] != 2) continue;
+        // Dame possono andare in tutte le direzioni
+        
+        int mid_r = from_row + dr_list[i] / 2;
+        int mid_c = from_col + dc_list[i] / 2;
+        int land_r = from_row + dr_list[i];
+        int land_c = from_col + dc_list[i];
+        
+        if (land_r < 0 || land_r >= 8 || land_c < 0 || land_c >= 8) continue;
+        
+        int mid_piece = board[mid_r][mid_c];
+        int is_enemy_king = (mid_piece == 3 || mid_piece == 4);
+        int is_enemy_pawn = (mid_piece == 1 || mid_piece == 2);
+        
+        // Pedina mangia solo pedine, Dama mangia tutto
+        if (piece == 1 && !is_enemy_pawn) continue;
+        if (piece == 2 && !is_enemy_pawn) continue;
+        if ((piece == 3 || piece == 4) && !is_enemy_king && !is_enemy_pawn) continue;
+        
+        if (board[land_r][land_c] != 0) continue;  // Destinazione libera
+        
+        // Simula e valuta cattura
+        int saved_mid = board[mid_r][mid_c];
+        int saved_from = board[from_row][from_col];
+        
+        board[from_row][from_col] = 0;
+        board[mid_r][mid_c] = 0;
+        board[land_r][land_c] = saved_from;
+        
+        int future_kings = 0, future_pawns = 0;
+        count_captures_recursive(board, land_r, land_c, saved_from, &future_kings, &future_pawns);
+        
+        int total_kings = (is_enemy_king ? 1 : 0) + future_kings;
+        int total_pawns = (is_enemy_pawn ? 1 : 0) + future_pawns;
+        int total = total_kings + total_pawns;
+        
+        board[from_row][from_col] = saved_from;
+        board[mid_r][mid_c] = saved_mid;
+        board[land_r][land_c] = 0;
+        
+        if (!found ||
+            total > best.total_captures ||
+            (total == best.total_captures && total_kings > best.captured_kings)) {
+            best.dr = dr_list[i];
+            best.dc = dc_list[i];
+            best.captured_kings = total_kings;
+            best.captured_pawns = total_pawns;
+            best.total_captures = total;
+            best.final_row = land_r;
+            best.final_col = land_c;
+            found = true;
+        }
+    }
+    
+    if (found) {
+        *out_dr = best.dr;
+        *out_dc = best.dc;
+        *out_land_r = best.final_row;
+        *out_land_c = best.final_col;
+    }
+    
+    return found;
+}
+
+// Esegue presa multipla obbligatoria
+bool execute_multi_capture(int board[8][8], int start_row, int start_col, 
+                           int* final_row, int* final_col, int* total_captured) {
+    int row = start_row, col = start_col;
+    int piece = board[row][col];
+    *total_captured = 0;
+    bool captured_something = false;
+    
+    while (1) {
+        int dr, dc, land_r, land_c;
+        
+        if (!find_best_capture(board, row, col, &dr, &dc, &land_r, &land_c)) {
+            break;  // Nessuna cattura disponibile
+        }
+        
+        int mid_r = row + dr / 2;
+        int mid_c = col + dc / 2;
+        
+        // Esegui cattura
+        board[row][col] = 0;
+        board[mid_r][mid_c] = 0;
+        board[land_r][land_c] = piece;
+        
+        (*total_captured)++;
+        captured_something = true;
+        
+        // Verifica promozione
+        if (piece == 1 && land_r == 0) {
+            board[land_r][land_c] = 3;  // Dama bianca
+            piece = 3;
+        } else if (piece == 2 && land_r == 7) {
+            board[land_r][land_c] = 4;  // Dama nera
+            piece = 4;
+        }
+        
+        row = land_r;
+        col = land_c;
+    }
+    
+    *final_row = row;
+    *final_col = col;
+    return captured_something;
 }
