@@ -139,3 +139,42 @@ Quando il tempo a disposizione *(aiTimeLimit)* scade, il ciclo MCTS si interromp
 La strategia standard è la "Robust Child": scegliere il nodo figlio della radice con il maggior numero di visite (visits),
 non necessariamente quello con il tasso di vittoria più alto. Un alto numero di visite indica che l'algoritmo ha "fiducia"
 in quella mossa, avendola esplorata ripetutamente perché promettente.
+
+Il flusso di esecuzione quando tocca al Nero (IA) nel gioco singolo è il seguente:
+Conversione Stato: La matrice board[8][8] viene convertita in Bitboard tramite board_to_bitboard().
+Inizializzazione Radice: Viene creato il nodo radice del MCTS con lo stato attuale.
+Loop di Ricerca.
+Esecuzione: La mossa restituita da *select_best_move()* viene applicata alla scacchiera tramite *apply_ai_move()*.
+
+## 4 - ALGORITMI UCB1 E PUCT + VARIANTI
+Nel cuore dell'algoritmo MCTS, durante la Fase 1 (Selezione), l'algoritmo deve decidere quale nodo figlio visitare. 
+Si trova di fronte al classico dilemma del Multi-Armed Bandit (MAB)
+Sfruttamento (Exploitation): Visitare il nodo che ha mostrato il miglior tasso di vittoria finora.
+Esplorazione (Exploration): Visitare i nodi che sono stati visitati poche volte,
+perché potrebbero nascondere una mossa vincente che non abbiamo ancora scoperto.
+
+Se l'IA sfrutta troppo, potrebbe perdere una mossa geniale ma controintuitiva.
+Se esplora troppo, spreca tempo calcolando mosse palesemente sbagliate.
+Per risolvere questo dilemma, il progetto implementa due distinte politiche di selezione: UCB1 e PUCT.
+
+# ucb1
+L'UCB1 è l'algoritmo storico e più diffuso per la selezione nel MCTS. La sua formula matematica calcola un 
+"punteggio di urgenza" per ogni nodo figlio.
+
+# puct
+Il PUCT è l'evoluzione moderna dell'UCB1, resa celebre da AlphaGo e AlphaZero di DeepMind.
+La differenza fondamentale è l'introduzione di una Probabilità a Priori (P).
+
+Il sistema di torneo mette a confronto 8 "motori" IA. Tutti usano il MCTS, ma differiscono per la politica 
+di selezione (UCB1 vs PUCT) e per i parametri interni.
+
+UCB1 Classic: Implementazione standard con costante teorica funge da baseline per bilanciare esplorazione e sfruttamento.
+UCB1 Delta: Adatta dinamicamente la costante di esplorazione in base alla varianza dei risultati per ridurre l'incertezza statistica.
+UCB1 Alpha: Riduce progressivamente la costante di esplorazione con la profondità, favorendo mosse ampie all'inizio e scelte greedy alla fine.
+UCB1 Fast: Ottimizzata per la velocità con costante ridotta e rollout semplificati, ideale per tempi di calcolo brevissimi.
+PUCT Standard: Utilizza la formula polinomiale con probabilità a priori uniformi e costante 1.2 per un'esplorazione fluida e continua.
+PUCT Explorative: Imposta un'altissima costante di esplorazione (2.5) per forzare l'analisi di rami insoliti e scovare trappole a lungo termine.
+PUCT Heuristic: Guida la ricerca fin dalla radice assegnando probabilità a priori più alte alle mosse tattiche e al controllo del centro.
+PUCT Balanced: Approccio conservativo con costante bassa (1.0) che privilegia lo sfruttamento di mosse solide e posizionali.
+
+
