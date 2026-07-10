@@ -1,4 +1,4 @@
-### PROGETTO DAMA - Intelligent Web - ###
+# PROGETTO DAMA - Intelligent Web - ###
 
 ## DAMA ITALIANA
 La Dama Italiana è un gioco da tavolo di strategia a informazione perfetta, 
@@ -113,7 +113,7 @@ Ogni nodo rappresenta uno stato specifico della scacchiera e una mossa che ci ha
 Chiamare malloc() per ogni nuovo nodo durante la ricerca rallenterebbe drasticamente l'algoritmo.
 Il MemoryPool prealloca un grande array di nodi in memoria statica.
 
-# CICLO MCTS
+### CICLO MCTS
 **Selezione (Selection)**
 Partendo dal nodo radice (la posizione attuale), l'algoritmo scende nell'albero scegliendo il figlio "migliore"
 fino a raggiungere un nodo foglia (un nodo non ancora completamente espanso).
@@ -157,11 +157,11 @@ Se l'IA sfrutta troppo, potrebbe perdere una mossa geniale ma controintuitiva.
 Se esplora troppo, spreca tempo calcolando mosse palesemente sbagliate.
 Per risolvere questo dilemma, il progetto implementa due distinte politiche di selezione: UCB1 e PUCT.
 
-# ucb1
+### ucb1
 L'UCB1 è l'algoritmo storico e più diffuso per la selezione nel MCTS. La sua formula matematica calcola un 
 "punteggio di urgenza" per ogni nodo figlio.
 
-# puct
+### puct
 Il PUCT è l'evoluzione moderna dell'UCB1, resa celebre da AlphaGo e AlphaZero di DeepMind.
 La differenza fondamentale è l'introduzione di una Probabilità a Priori (P).
 
@@ -213,7 +213,7 @@ Il torneo implementato segue il formato classico dell'eliminazione diretta a 8 p
 └─────────────────────────────────────────────────────────────────┘
 La logica di progressione è gestita nel main() di *tournament_main.c* attraverso il contatore *current_match*:
 
-# PUNTEGGI
+### PUNTEGGI
 
 Oltre al risultato binario (vittoria/sconfitta), il torneo implementa un sistema di punteggio cumulativo per 
 produrre una classifica più sfumata e statisticamente significativa.
@@ -224,7 +224,7 @@ Punti del Nero: 12 - 8 = 4 (ha mangiato 4 pezzi bianchi)
 I punti vengono sommati match dopo match nell'array globale *engine_points[8]*.
 La classifica finale è ordinata per punti cumulativi decrescenti, non per vittorie.
 
-# FLUSSO TORNEP
+### FLUSSO TORNEO
 ┌─────────────────────────────────────────────────────────────────┐
 │ AVVIO TORNEO                                                    │
 │ - Inizializza engine_points[8] = {0}                            │
