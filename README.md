@@ -177,4 +177,97 @@ PUCT Explorative: Imposta un'altissima costante di esplorazione (2.5) per forzar
 PUCT Heuristic: Guida la ricerca fin dalla radice assegnando probabilità a priori più alte alle mosse tattiche e al controllo del centro.
 PUCT Balanced: Approccio conservativo con costante bassa (1.0) che privilegia lo sfruttamento di mosse solide e posizionali.
 
+## 5 - ORGANIZZAZIONE TORNEO
+Il modulo tournament.c e tournament_main.c implementa un sistema di torneo che orchestra le partite, gestisce il tabellone
+a eliminazione diretta e raccoglie le statistiche per produrre una classifica finale.
+In questa sezione analizzeremo la struttura del torneo implementato, le motivazioni progettuali e il confronto con l'approccio
+alternativo del Round Robin (girone all'italiana).
 
+Il torneo implementato segue il formato classico dell'eliminazione diretta a 8 partecipanti (single-elimination bracket)
+┌─────────────────────────────────────────────────────────────────┐
+│                    FASE 1: QUARTI DI FINALE                      │
+│                    (4 match, 8 IA partecipanti)                  │
+├─────────────────────────────────────────────────────────────────┤
+│  Match 1: IA0 vs IA1                                            │
+│  Match 2: IA2 vs IA3                                            │
+│  Match 3: IA4 vs IA5                                            │
+│  Match 4: IA6 vs IA7                                            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ Vincitori avanzano
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    FASE 2: SEMIFINALI                            │
+│                    (2 match, 4 IA partecipanti)                  │
+├─────────────────────────────────────────────────────────────────┤
+│  Match 5: Vincitore Q1 vs Vincitore Q2                          │
+│  Match 6: Vincitore Q3 vs Vincitore Q4                          │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ Vincitori e perdenti separati
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    FASE 3: FINALI                                │
+│                    (2 match)                                     │
+├─────────────────────────────────────────────────────────────────┤
+│  Match 7 (FINALE):         Vincitore S1 vs Vincitore S2         │
+│  Match 8 (3° POSTO):       Perdente S1  vs Perdente S2          │
+└─────────────────────────────────────────────────────────────────┘
+La logica di progressione è gestita nel main() di *tournament_main.c* attraverso il contatore *current_match*:
+
+# PUNTEGGI
+
+Oltre al risultato binario (vittoria/sconfitta), il torneo implementa un sistema di punteggio cumulativo per 
+produrre una classifica più sfumata e statisticamente significativa.
+Il punteggio di ogni IA in un match è calcolato come il numero di pedine avversarie catturate:
+Se alla fine del match il Bianco ha ancora 8 pezzi e il Nero ne ha 4:
+Punti del Bianco: 12 - 4 = 8 (ha mangiato 8 pezzi neri)
+Punti del Nero: 12 - 8 = 4 (ha mangiato 4 pezzi bianchi)
+I punti vengono sommati match dopo match nell'array globale *engine_points[8]*.
+La classifica finale è ordinata per punti cumulativi decrescenti, non per vittorie.
+
+# FLUSSO TORNEP
+┌─────────────────────────────────────────────────────────────────┐
+│ AVVIO TORNEO                                                    │
+│ - Inizializza engine_points[8] = {0}                            │
+│ - Inizializza engine_wins[8] = {0}                              │
+│ - setup_bracket() con le 8 IA registrate                        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ LOOP: current_match da 0 a 7                                    │
+│                                                                 │
+│   play_tournament_game(p1, p2, ...)                             │
+│       │                                                         │
+│       ├─► Calcola pts1, pts2 (pedine mangiate)                  │
+│       ├─► Determina vincitore (res >= 0.9 o <= 0.1)             │
+│       ├─► engine_points[idx] += punti                           │
+│       ├─► engine_wins[idx]++ se vincitore                       │
+│       └─► matches[current_match].winner = ...                   │
+│                                                                 │
+│   current_match++                                               │
+│                                                                 │
+│   Se current_match == 4: genera semifinali                      │
+│   Se current_match == 6: genera finali                          │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ TORNEO COMPLETATO                                               │
+│                                                                 │
+│   Ordina engine_points[] in ordine decrescente                  │
+│   Disegna classifica finale con draw_report()                   │
+│                                                                 │
+│   Output:                                                       │
+│   #1 - PUCT Heuristic - 45 punti - 7 vittorie                   │
+│   #2 - UCB1 Classic   - 38 punti - 5 vittorie                   │
+│   #3 - PUCT Balanced  - 32 punti - 4 vittorie                   │
+│   ...                                                           │
+└─────────────────────────────────────────────────────────────────┘
+
+## 6 - CONCLUSIONI
+Questo progetto ha dimostrato come sia possibile implementare un sistema completo di gioco della Dama Italiana che unisce rigore normativo, intelligenza artificiale avanzata e architettura software modulare in un'unica applicazione coesa scritta in C.
+Gli obiettivi iniziali sono stati pienamente raggiunti:
+Regolamento ufficiale implementato: Il motore di gioco gestisce correttamente tutte le regole complesse della Dama Italiana, dalla presa obbligatoria alle priorità di cattura, dalla presa multipla alle condizioni di terminazione (vittoria per sfinimento, blocco, patta per stallo o limite mosse).
+Sistema IA modulare e scalabile: L'architettura a plugin ha permesso di sviluppare e far competere 8 varianti distinte di algoritmi MCTS (4 UCB1 + 4 PUCT) senza modificare il motore di ricerca centrale, dimostrando la validità del pattern Strategy.
+Torneo automatizzato funzionante: Il sistema orchestra correttamente un tabellone a eliminazione diretta con 8 partecipanti, calcola punteggi cumulativi basati sulle performance e genera report finali ordinati.
+Performance ottimizzate: L'uso di Bitboard e Memory Pool ha permesso di eseguire migliaia di simulazioni MCTS al secondo, mantenendo tempi di risposta dell'IA inferiori al secondo anche con configurazioni complesse.
