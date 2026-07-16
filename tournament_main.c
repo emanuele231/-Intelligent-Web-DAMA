@@ -75,7 +75,7 @@ static void setup_bracket(const AIEngineDef** engines) {
     
     // Terzo posto (match 7)
     matches[7].id = 7;
-    matches[7].round_name = "3° Posto";
+    matches[7].round_name = "3 Posto";
     matches[7].p1 = NULL;
     matches[7].p2 = NULL;
     matches[7].winner = NULL;
@@ -118,24 +118,25 @@ static void draw_match(int idx, float x, float y, float w, float h) {
     Color bg_col, border_col;
     
     if (m->completed) {
-        bg_col = (Color){40, 60, 40, 255};  // Verde scuro
+        bg_col = (Color){40, 60, 40, 255};
         border_col = (Color){0, 180, 80, 255};
     }
     else if (tournament_running && current_match == idx) {
-        bg_col = (Color){60, 60, 40, 255};  // Giallo
+        bg_col = (Color){60, 60, 40, 255};
         border_col = (Color){255, 200, 0, 255};
     }
     else {
-        bg_col = (Color){40, 40, 55, 255};  // Grigio
+        bg_col = (Color){40, 40, 55, 255};
         border_col = (Color){100, 100, 120, 255};
     }
     
     DrawRectangle(x, y, w, h, bg_col);
     DrawRectangleLinesEx((Rectangle){x, y, w, h}, m->completed ? 2 : 1, border_col);
 
+    // Solo il numero puro, niente simboli
     char match_num[16];
-    sprintf(match_num, "#%d", idx + 1);
-    DrawText(match_num, x + w - 25, y + 4, 10, (Color){150, 150, 180, 255});
+    sprintf(match_num, "%d", idx + 1);
+    DrawText(match_num, x + w - 15, y + 5, 10, (Color){150, 150, 180, 255});
 
     DrawText(m->round_name, x + 8, y + 4, 10, (Color){150, 150, 180, 255});
     
@@ -147,9 +148,7 @@ static void draw_match(int idx, float x, float y, float w, float h) {
     
     DrawText("VS", x + w/2 - 8, y + 28, 9, DARKGRAY);
     DrawText(m->result_text, x + w - 110, y + 28, 9, LIGHTGRAY);
-    
-    if (m->completed) DrawText("✓", x + w - 15, y + 4, 12, (Color){0, 255, 0, 255});
-    else if (tournament_running && current_match == idx) DrawText("▶", x + w - 15, y + 4, 12, (Color){255, 200, 0, 255});
+
 }
 
 static void draw_bracket_ui() {
@@ -205,7 +204,7 @@ static void draw_report() {
         int idx = sorted[i];
         float row_y = y + 70 + i * 45;
         
-        char pos[6]; sprintf(pos, "#%d", i + 1);
+        char pos[6]; sprintf(pos, "%d", i + 1);
         DrawText(pos, x + 35, row_y, 16, i < 3 ? GOLD : WHITE);
         DrawText(all[idx]->name, x + 80, row_y, 16, WHITE);
         
@@ -252,7 +251,6 @@ static void draw_buttons(bool* start, bool* exit, bool* toggle_report) {
     DrawRectangleLinesEx(btn_exit, 2, WHITE);
     DrawText("ESCI", btn_exit.x + 55, btn_exit.y + 12, 16, WHITE);
 
-    // LOGICA AVVIO CORRETTA: Avvia solo se non è in corso e non è finito
     if (!tournament_running && !tournament_finished &&
         IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && 
         CheckCollisionPointRec(GetMousePosition(), btn_start)) {
@@ -321,7 +319,7 @@ int main(void) {
                 matches[i].p2 = NULL;
             }
             
-            start_req = false; // Resetta il flag per evitare loop infiniti
+            start_req = false;
             printf("=== TORNEO AVVIATO ===\n");
         }
 
@@ -329,11 +327,9 @@ int main(void) {
         if (tournament_running && current_match < MAX_MATCHES) {
             TournamentMatch* m = &matches[current_match];
             
-            // Se il match non ha giocatori (aspetta vincitori precedenti), salta
             if (!m->p1 || !m->p2) { 
                 current_match++; 
             } 
-            // Se il match ha giocatori ma non è stato giocato, giocalo
             else if (!m->completed) {
                 printf("\n>>> MATCH %d/%d: %s vs %s <<<\n", 
                        current_match + 1, MAX_MATCHES, m->p1->name, m->p2->name);
@@ -349,7 +345,6 @@ int main(void) {
                     if (all[i] == m->p2) idx2 = i;
                 }
 
-                // Aggiorna vincitore
                 if (res >= 0.9) { 
                     m->winner = m->p1; 
                     if(idx1 != -1) engine_wins[idx1]++;
@@ -359,12 +354,11 @@ int main(void) {
                     if(idx2 != -1) engine_wins[idx2]++;
                     sprintf(m->result_text, "Vittoria %s", m->p2->name); 
                 } else { 
-                    m->winner = m->p1; // Vince il bianco in caso di patta
+                    m->winner = m->p1; 
                     if(idx1 != -1) engine_wins[idx1]++;
                     sprintf(m->result_text, "Patta (Vince %s)", m->p1->name); 
                 }
                 
-                // Accumula punti
                 if (idx1 != -1) engine_points[idx1] += p1;
                 if (idx2 != -1) engine_points[idx2] += p2;
                 
@@ -376,7 +370,6 @@ int main(void) {
                 m->completed = true; 
                 current_match++;
                 
-                // Genera Semifinali dopo i Quarti
                 if (current_match == 4) {
                     matches[4].p1 = matches[0].winner; 
                     matches[4].p2 = matches[1].winner;
@@ -385,26 +378,23 @@ int main(void) {
                     printf("\n--- Semifinali generate ---\n");
                 }
                 
-                // Genera Finale e Terzo posto dopo le Semifinali
                 if (current_match == 6) {
                     matches[6].p1 = matches[4].winner; 
                     matches[6].p2 = matches[5].winner;
                     
-                    // I perdenti delle semifinali giocano per il 3° posto
                     matches[7].p1 = (matches[4].winner == matches[4].p1) ? matches[4].p2 : matches[4].p1;
                     matches[7].p2 = (matches[5].winner == matches[5].p1) ? matches[5].p2 : matches[5].p1;
                     printf("\n--- Finale e Terzo posto generati ---\n");
                 }
                 
-                // FINE TORNEO
                 if (current_match == MAX_MATCHES) { 
                     tournament_running = false; 
                     tournament_finished = true;
-                    start_req = false; // Blocca definitivi riavvii automatici
+                    start_req = false; 
                     
                     printf("\n=== TORNEO COMPLETATO ===\n");
-                    printf("🏆 VINCITORE: %s\n", matches[6].winner ? matches[6].winner->name : "N/A");
-                    printf("🥉 TERZO POSTO: %s\n", matches[7].winner ? matches[7].winner->name : "N/A");
+                    printf("VINCITORE: %s\n", matches[6].winner ? matches[6].winner->name : "N/A");
+                    printf("TERZO POSTO: %s\n", matches[7].winner ? matches[7].winner->name : "N/A");
                     printf("\nClassifica finale:\n");
                     for(int i=0; i<8; i++) {
                         printf("%2d. %-20s Punti: %3d | Vittorie: %d\n", 
